@@ -125,8 +125,8 @@ def main() -> None:
     resp = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15, allow_redirects=False)
     if resp.status_code in (301, 302, 303, 307, 308):
         location = resp.headers.get("Location", "")
-        print(f"Redirect naar: {location}")
-        resp = requests.post(location, json=payload, timeout=15, allow_redirects=False)
+        # Script is al uitgevoerd — redirect ophalen met GET om de response te lezen
+        resp = requests.get(location, timeout=15)
 
     if resp.ok:
         send_message("✅ Opgeslagen in je Google Spreadsheet!")
