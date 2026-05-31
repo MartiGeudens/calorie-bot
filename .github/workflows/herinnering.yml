@@ -1,0 +1,25 @@
+name: Dagelijkse herinnering (21:00)
+
+on:
+  schedule:
+    - cron: '0 19 * * *'   # 21:00 Belgische tijd (CEST = UTC+2)
+  workflow_dispatch:         # Ook handmatig te starten via GitHub (voor testen)
+
+jobs:
+  herinnering:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Installeer afhankelijkheden
+        run: pip install requests
+
+      - name: Stuur herinnering
+        run: python remind.py
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID:   ${{ secrets.CHAT_ID }}
