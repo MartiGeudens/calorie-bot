@@ -1,0 +1,27 @@
+name: Maaltijden verwerken (00:00)
+
+on:
+  schedule:
+    - cron: '0 22 * * *'   # 00:00 Belgische tijd (CEST = UTC+2)
+  workflow_dispatch:         # Ook handmatig te starten via GitHub (voor testen)
+
+jobs:
+  verwerking:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Installeer afhankelijkheden
+        run: pip install requests google-generativeai pytz
+
+      - name: Verwerk maaltijden
+        run: python process_food.py
+        env:
+          BOT_TOKEN:       ${{ secrets.BOT_TOKEN }}
+          CHAT_ID:         ${{ secrets.CHAT_ID }}
+          GEMINI_API_KEY:  ${{ secrets.GEMINI_API_KEY }}
+          APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
