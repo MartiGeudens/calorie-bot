@@ -16,12 +16,12 @@ jobs:
           python-version: '3.11'
 
       - name: Installeer afhankelijkheden
-        run: pip install requests google-generativeai pytz
+        run: pip install requests groq pytz
 
       - name: Verwerk maaltijden
         run: python process_food.py
         env:
           BOT_TOKEN:       ${{ secrets.BOT_TOKEN }}
           CHAT_ID:         ${{ secrets.CHAT_ID }}
-          GEMINI_API_KEY:  ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY:    ${{ secrets.GROQ_API_KEY }}
           APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
