@@ -1,9 +1,7 @@
 name: Ochtend gewichtsvraag (09:00)
 
 on:
-  schedule:
-    - cron: '0 7 * * *'   # 09:00 Belgische tijd (CEST = UTC+2)
-  workflow_dispatch:
+  workflow_dispatch:         # Getriggerd door cron-job.org om 09:00
 
 jobs:
   gewicht-vraag:
