@@ -1,7 +1,9 @@
 name: Recept toevoegen
 
 on:
-  workflow_dispatch:   # Alleen handmatig triggeren
+  schedule:
+    - cron: '0 7,9,11,13,15,17,19,21 * * *'  # Elke 2u van 09:00-23:00 CEST
+  workflow_dispatch:                            # Ook nog handmatig te starten
 
 permissions:
   contents: write
