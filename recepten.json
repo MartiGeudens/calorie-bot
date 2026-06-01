@@ -6,5 +6,13 @@
     "vetten": 9,
     "vezels": 6,
     "portie": "1 kom ~320g"
+  },
+  "pasta_bolognese": {
+    "calories": 742,
+    "eiwitten": 37,
+    "koolhydraten": 83,
+    "vetten": 26,
+    "vezels": 4,
+    "portie": "1 bord ~450g"
   }
 }
