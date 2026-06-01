@@ -16,6 +16,7 @@ RECIPES_FILE = "recepten.json"
 groq_client = Groq(api_key=GROQ_API_KEY)
 
 
+# ── Telegram ──────────────────────────────────────────────────────────────────
 def send_message(text):
     requests.post(f"{BASE_URL}/sendMessage", json={
         "chat_id": CHAT_ID, "text": text, "parse_mode": "Markdown"
@@ -27,6 +28,7 @@ def get_updates():
     return resp.json().get("result", [])
 
 
+# ── Recepten opslaan ──────────────────────────────────────────────────────────
 def load_recipes():
     try:
         with open(RECIPES_FILE, encoding="utf-8") as f:
@@ -39,52 +41,154 @@ def commit_recipes():
     subprocess.run(["git", "config", "user.email", "action@github.com"])
     subprocess.run(["git", "config", "user.name", "Calorie Bot"])
     subprocess.run(["git", "add", RECIPES_FILE])
-    result = subprocess.run(["git", "diff", "--staged", "--quiet"])
-    if result.returncode != 0:
+    r = subprocess.run(["git", "diff", "--staged", "--quiet"])
+    if r.returncode != 0:
         subprocess.run(["git", "commit", "-m", "Recepten bijgewerkt"])
         subprocess.run(["git", "push"])
 
 
+# ── Bericht parsen ────────────────────────────────────────────────────────────
+def parse_recipe_message(text):
+    """
+    Ondersteunde formaten:
+      /recept_ai naam: ingrediënten          → AI berekent macro's
+      /recept naam: ingrediënten | macro's   → jij geeft macro's op
+
+    Geeft terug: (mode, naam_hint, ingredienten_str, manual_macros_str of None)
+    """
+    if re.match(r'^/recept_ai\b', text, re.IGNORECASE):
+        mode = 'ai'
+        rest = re.sub(r'^/recept_ai\s*:?\s*', '', text, flags=re.IGNORECASE).strip()
+    else:
+        mode = 'manual'
+        rest = re.sub(r'^(/recept|recept)\s*:?\s*', '', text, flags=re.IGNORECASE).strip()
+
+    # Splits op | voor handmatige macro's (enkel relevant bij /recept)
+    parts = rest.split('|', 1)
+    ingredienten_deel = parts[0].strip()
+    manual_macros_str = parts[1].strip() if len(parts) > 1 else None
+
+    # Naam staat voor de eerste dubbele punt
+    if ':' in ingredienten_deel:
+        naam_hint, ingr_str = ingredienten_deel.split(':', 1)
+        naam_hint = naam_hint.strip()
+        ingr_str  = ingr_str.strip()
+    else:
+        naam_hint = ""
+        ingr_str  = ingredienten_deel
+
+    return mode, naam_hint, ingr_str, manual_macros_str
+
+
+def parse_manual_macros(text):
+    """Parseert '450 kcal, 25g eiwit, 55g koolh, 12g vet, 6g vezel'"""
+    patterns = {
+        'calories':     r'(\d+)\s*(?:kcal|cal)',
+        'eiwitten':     r'(\d+)\s*g?\s*(?:eiwit|prot)',
+        'koolhydraten': r'(\d+)\s*g?\s*(?:koolh|carb)',
+        'vetten':       r'(\d+)\s*g?\s*(?:vet|fat)',
+        'vezels':       r'(\d+)\s*g?\s*(?:vezel|fib)',
+    }
+    data = {}
+    for key, pattern in patterns.items():
+        m = re.search(pattern, text, re.IGNORECASE)
+        if m:
+            data[key] = int(m.group(1))
+    return data
+
+
+# ── Recept verwerken ──────────────────────────────────────────────────────────
 def process_recipe_command(text):
-    rest = re.sub(r'^(/recept|recept)\s*:?\s*', '', text, flags=re.IGNORECASE).strip()
+    mode, naam_hint, ingr_str, manual_macros_str = parse_recipe_message(text)
 
-    prompt = f"""Analyseer dit recept en geef de voedingswaarden PER PORTIE.
+    if mode == 'manual' and manual_macros_str:
+        # ── Manuele macro's: AI structureert enkel de ingrediënten ──
+        manual = parse_manual_macros(manual_macros_str)
 
-Recept: {rest}
+        prompt = f"""Structureer dit recept. Geef GEEN voedingswaarden — die worden manueel opgegeven.
+
+Naam: {naam_hint}
+Ingrediënten: {ingr_str}
 
 Antwoord UITSLUITEND met geldige JSON:
-{{"naam": "", "calories": 0, "eiwitten": 0, "koolhydraten": 0, "vetten": 0, "vezels": 0, "portie": ""}}
+{{"naam": "", "portie": "", "ingredienten": []}}
 
-- naam: korte naam in lowercase, spaties als underscores (bv "pasta_bolognese")
-- portie: beschrijving van 1 portie (bv "1 bord ~450g")
+- naam: lowercase met underscores (bv "pasta_bolognese")
+- portie: geschatte portiegrootte voor 1 persoon (bv "1 bord ~450g")
+- ingredienten: gestructureerde lijst, elk item met hoeveelheid (bv ["200g spaghetti", "150g rundergehakt"])"""
+
+        response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+        )
+        raw = response.choices[0].message.content.strip().replace("```json", "").replace("```", "").strip()
+        struct = json.loads(raw)
+
+        naam = struct.get("naam") or naam_hint.lower().replace(" ", "_")
+        data = {
+            "portie":       struct.get("portie", "1 portie"),
+            "ingredienten": struct.get("ingredienten", [i.strip() for i in ingr_str.split(',')]),
+            "calories":     manual.get("calories", 0),
+            "eiwitten":     manual.get("eiwitten", 0),
+            "koolhydraten": manual.get("koolhydraten", 0),
+            "vetten":       manual.get("vetten", 0),
+            "vezels":       manual.get("vezels", 0),
+            "macros_bron":  "manueel",
+        }
+        return naam, data
+
+    elif mode == 'manual' and not manual_macros_str:
+        send_message(
+            "⚠️ *Macro's ontbreken bij /recept*\n\n"
+            "Voeg ze toe na een `|`, bv:\n"
+            "`/recept pasta bolognese: 200g spaghetti | 520 kcal, 28g eiwit, 65g koolh, 15g vet`\n\n"
+            "Of gebruik `/recept_ai` om macro's automatisch te laten berekenen."
+        )
+        return None, None
+
+    else:
+        # ── AI berekent alles (/recept_ai) ──
+        prompt = f"""Analyseer dit recept. Structureer de ingrediënten EN bereken voedingswaarden PER PORTIE.
+Gebruik Belgische portiegroottes. Wees realistisch.
+
+Naam: {naam_hint}
+Ingrediënten: {ingr_str}
+
+Antwoord UITSLUITEND met geldige JSON:
+{{"naam": "", "portie": "", "ingredienten": [], "calories": 0, "eiwitten": 0, "koolhydraten": 0, "vetten": 0, "vezels": 0}}
+
+- naam: lowercase met underscores (bv "pasta_bolognese")
+- portie: geschatte portiegrootte voor 1 persoon (bv "1 bord ~450g")
+- ingredienten: lijst met exacte hoeveelheden (bv ["200g spaghetti", "150g rundergehakt"])
 - calories/eiwitten/koolhydraten/vetten/vezels: per portie, gehele getallen"""
 
-    response = groq_client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2,
-    )
-    raw = response.choices[0].message.content.strip().replace("```json", "").replace("```", "").strip()
-    data = json.loads(raw)
-    naam = data.pop("naam", rest[:40].lower().replace(" ", "_"))
-    return naam, data
+        response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+        )
+        raw = response.choices[0].message.content.strip().replace("```json", "").replace("```", "").strip()
+        data = json.loads(raw)
+        naam = data.pop("naam") or naam_hint.lower().replace(" ", "_")
+        data["macros_bron"] = "ai"
+        return naam, data
 
 
+# ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     updates = get_updates()
 
-    # Zoek RECEPT-berichten — laat de wachtrij intact voor de maaltijden-workflow
     recipe_commands = [
         msg.get("text", "").strip()
         for update in updates
         if (msg := update.get("message") or update.get("edited_message"))
         and msg.get("from", {}).get("id") == CHAT_ID
         and not msg.get("from", {}).get("is_bot", False)
-        and re.match(r'^(/recept|recept)\b', msg.get("text", ""), re.IGNORECASE)
+        and re.match(r'^(/recept_ai|/recept|recept)\b', msg.get("text", ""), re.IGNORECASE)
     ]
 
     if not recipe_commands:
-        # Stil afsluiten als er niets te verwerken is — geen bericht sturen
         print("Geen recept-commando's gevonden in de wachtrij.")
         return
 
@@ -92,15 +196,29 @@ def main():
     for cmd in recipe_commands:
         try:
             naam, data = process_recipe_command(cmd)
+            if naam is None:
+                continue
             recipes[naam] = data
+
+            bron_label = "🤖 AI" if data.get("macros_bron") == "ai" else "✍️ Manueel"
+            ingr_count = len(data.get("ingredienten", []))
+
             send_message(
-                f"✅ *Recept opgeslagen: {naam}*\n"
-                f"_{data.get('portie', '1 portie')}: {data['calories']} kcal, "
-                f"{data['eiwitten']}g eiwit, {data['koolhydraten']}g koolh_"
+                f"✅ *Recept opgeslagen: {naam.replace('_', ' ')}*\n"
+                f"_{data.get('portie', '1 portie')} · {ingr_count} ingrediënten_\n\n"
+                f"🔥 {data['calories']} kcal · 💪 {data['eiwitten']}g eiwit · "
+                f"🌾 {data['koolhydraten']}g koolh · 🥑 {data['vetten']}g vet\n"
+                f"_Macro's: {bron_label}_"
             )
         except Exception as e:
             print(f"Recept-fout: {e}")
-            send_message("❌ Kon recept niet verwerken. Probeer: `RECEPT naam: ingrediënten`")
+            send_message(
+                "❌ Kon recept niet verwerken.\n\n"
+                "*Formaat met AI-macro's:*\n"
+                "`/recept naam: ingrediënten`\n\n"
+                "*Formaat met eigen macro's:*\n"
+                "`/recept naam: ingrediënten | 450 kcal, 25g eiwit, 55g koolh, 12g vet`"
+            )
 
     try:
         with open(RECIPES_FILE, "w", encoding="utf-8") as f:
