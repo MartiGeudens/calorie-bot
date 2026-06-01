@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1a1a2e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>🍽️ Mijn Receptenboek</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #f7f3ee;
+      --card:      #ffffff;
+      --text:      #1a1a1a;
+      --subtext:   #6b6b6b;
+      --accent:    #e07b39;
+      --accent2:   #3a7d44;
+      --border:    #e8e0d8;
+      --pill-bg:   #f0ebe4;
+      --shadow:    0 2px 12px rgba(0,0,0,0.08);
+      --header-bg: #1a1a2e;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--header-bg);
+      color: #fff;
+      padding: 20px 16px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    header h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      margin-bottom: 12px;
+    }
+
+    header h1 span { color: var(--accent); }
+
+    .search-bar {
+      display: flex;
+      align-items: center;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 12px;
+      padding: 8px 14px;
+      gap: 8px;
+    }
+
+    .search-bar input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #fff;
+      font-size: 0.95rem;
+      width: 100%;
+    }
+
+    .search-bar input::placeholder { color: rgba(255,255,255,0.5); }
+    .search-icon { color: rgba(255,255,255,0.5); font-size: 1rem; }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: flex;
+      gap: 8px;
+      padding: 12px 16px;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .stats-bar::-webkit-scrollbar { display: none; }
+
+    .stat-chip {
+      flex-shrink: 0;
+      background: var(--pill-bg);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 0.8rem;
+      color: var(--subtext);
+      white-space: nowrap;
+    }
+
+    .stat-chip strong { color: var(--text); }
+
+    /* ── Grid ── */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      padding: 16px;
+    }
+
+    @media (min-width: 600px) {
+      .grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (min-width: 900px) {
+      .grid { grid-template-columns: 1fr 1fr 1fr; }
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--card);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .card:active { transform: scale(0.98); }
+
+    .card-header {
+      background: linear-gradient(135deg, var(--accent), #c0622a);
+      padding: 18px 16px 14px;
+    }
+
+    .card-emoji { font-size: 2rem; margin-bottom: 6px; }
+
+    .card-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #fff;
+      text-transform: capitalize;
+      line-height: 1.3;
+    }
+
+    .card-portie {
+      font-size: 0.78rem;
+      color: rgba(255,255,255,0.75);
+      margin-top: 3px;
+    }
+
+    .card-body { padding: 14px 16px; }
+
+    .kcal-row {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+      margin-bottom: 12px;
+    }
+
+    .kcal-num {
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    .kcal-label { font-size: 0.8rem; color: var(--subtext); }
+
+    .macros {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .macro {
+      background: var(--pill-bg);
+      border-radius: 10px;
+      padding: 7px 10px;
+    }
+
+    .macro-label {
+      font-size: 0.7rem;
+      color: var(--subtext);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 2px;
+    }
+
+    .macro-val {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .macro.eiwit  { border-left: 3px solid #3a7d44; }
+    .macro.koolh  { border-left: 3px solid #e0963a; }
+    .macro.vet    { border-left: 3px solid #e04a3a; }
+    .macro.vezel  { border-left: 3px solid #3a5fa8; }
+
+    /* ── Empty / loading ── */
+    .center-msg {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--subtext);
+    }
+
+    .center-msg .icon { font-size: 3rem; margin-bottom: 12px; }
+    .center-msg p { font-size: 1rem; line-height: 1.6; }
+
+    /* ── No results ── */
+    .no-results { display: none; }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 24px 16px;
+      font-size: 0.78rem;
+      color: var(--subtext);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🍽️ Mijn <span>Receptenboek</span></h1>
+  <div class="search-bar">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="search" placeholder="Zoek een recept…" autocomplete="off" />
+  </div>
+</header>
+
+<div class="stats-bar" id="statsBar">
+  <div class="stat-chip">Laden…</div>
+</div>
+
+<main>
+  <div class="grid" id="grid"></div>
+
+  <div class="center-msg no-results" id="noResults">
+    <div class="icon">🤷</div>
+    <p>Geen recepten gevonden voor deze zoekopdracht.</p>
+  </div>
+
+  <div class="center-msg" id="loadingMsg">
+    <div class="icon">⏳</div>
+    <p>Recepten laden…</p>
+  </div>
+</main>
+
+<footer id="footer"></footer>
+
+<script>
+  const EMOJIS = ["🍝","🥗","🍳","🥩","🍜","🥘","🫕","🍲","🥙","🌮","🍱","🥣","🧆","🫔","🍛","🥞","🍖","🫙","🥚","🧇"];
+
+  function randomEmoji(naam) {
+    const idx = naam.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % EMOJIS.length;
+    return EMOJIS[idx];
+  }
+
+  function formatNaam(naam) {
+    return naam.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  function renderCard(naam, data) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.naam = naam.toLowerCase();
+
+    card.innerHTML = `
+      <div class="card-header">
+        <div class="card-emoji">${randomEmoji(naam)}</div>
+        <div class="card-title">${formatNaam(naam)}</div>
+        <div class="card-portie">📏 ${data.portie || '1 portie'}</div>
+      </div>
+      <div class="card-body">
+        <div class="kcal-row">
+          <span class="kcal-num">${data.calories}</span>
+          <span class="kcal-label">kcal per portie</span>
+        </div>
+        <div class="macros">
+          <div class="macro eiwit">
+            <div class="macro-label">Eiwitten</div>
+            <div class="macro-val">${data.eiwitten} g</div>
+          </div>
+          <div class="macro koolh">
+            <div class="macro-label">Koolhydraten</div>
+            <div class="macro-val">${data.koolhydraten} g</div>
+          </div>
+          <div class="macro vet">
+            <div class="macro-label">Vetten</div>
+            <div class="macro-val">${data.vetten} g</div>
+          </div>
+          <div class="macro vezel">
+            <div class="macro-label">Vezels</div>
+            <div class="macro-val">${data.vezels} g</div>
+          </div>
+        </div>
+      </div>`;
+
+    return card;
+  }
+
+  function calcGemiddelde(recepten) {
+    const vals = Object.values(recepten);
+    if (!vals.length) return null;
+    const avg = k => Math.round(vals.reduce((s, v) => s + (v[k] || 0), 0) / vals.length);
+    return { kcal: avg('calories'), eiwit: avg('eiwitten'), koolh: avg('koolhydraten'), vet: avg('vetten') };
+  }
+
+  async function load() {
+    try {
+      const resp = await fetch('recepten.json?v=' + Date.now());
+      const recepten = await resp.json();
+      const namen = Object.keys(recepten);
+
+      document.getElementById('loadingMsg').style.display = 'none';
+
+      if (namen.length === 0) {
+        document.getElementById('loadingMsg').style.display = 'block';
+        document.getElementById('loadingMsg').innerHTML = `
+          <div class="icon">📭</div>
+          <p>Nog geen recepten opgeslagen.<br>Stuur <strong>/recept naam: ingrediënten</strong> naar je bot!</p>`;
+        document.getElementById('statsBar').innerHTML = '<div class="stat-chip">0 recepten</div>';
+        return;
+      }
+
+      // Stats bar
+      const gem = calcGemiddelde(recepten);
+      document.getElementById('statsBar').innerHTML = `
+        <div class="stat-chip"><strong>${namen.length}</strong> recepten</div>
+        <div class="stat-chip">Gem. <strong>${gem.kcal} kcal</strong></div>
+        <div class="stat-chip">Gem. <strong>${gem.eiwit}g</strong> eiwit</div>
+        <div class="stat-chip">Gem. <strong>${gem.koolh}g</strong> koolh</div>
+        <div class="stat-chip">Gem. <strong>${gem.vet}g</strong> vet</div>`;
+
+      // Cards
+      const grid = document.getElementById('grid');
+      namen.sort().forEach(naam => {
+        grid.appendChild(renderCard(naam, recepten[naam]));
+      });
+
+      // Footer
+      document.getElementById('footer').textContent =
+        `Laatst bijgewerkt: ${new Date().toLocaleDateString('nl-BE', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+
+      // Search
+      document.getElementById('search').addEventListener('input', e => {
+        const q = e.target.value.toLowerCase().replace(/ /g, '_');
+        let found = 0;
+        document.querySelectorAll('.card').forEach(card => {
+          const match = card.dataset.naam.includes(q) || card.dataset.naam.replace(/_/g,' ').includes(q);
+          card.style.display = match ? '' : 'none';
+          if (match) found++;
+        });
+        document.getElementById('noResults').style.display = found === 0 ? 'block' : 'none';
+      });
+
+    } catch (err) {
+      document.getElementById('loadingMsg').innerHTML = `
+        <div class="icon">❌</div>
+        <p>Kon recepten niet laden.<br><small>${err.message}</small></p>`;
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>
