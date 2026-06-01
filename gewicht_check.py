@@ -57,19 +57,32 @@ def main():
     ).timestamp())
 
     updates = get_updates()
+    print(f"Aantal updates: {len(updates)}")
+    print(f"Cutoff timestamp: {cutoff_ts} (07:00 Brussels)")
+
     gewicht = None
 
     for update in reversed(updates):
         msg = update.get("message") or update.get("edited_message")
         if not msg:
+            print(f"Update {update.get('update_id')} heeft geen message-veld, overgeslagen.")
             continue
         sender = msg.get("from", {})
-        if sender.get("id") != CHAT_ID or sender.get("is_bot", False):
-            continue
-        if msg.get("date", 0) < cutoff_ts:
-            continue  # Te oud
+        sender_id = sender.get("id")
+        is_bot = sender.get("is_bot", False)
+        msg_date = msg.get("date", 0)
+        text = msg.get("text", "")
+        print(f"Bericht: sender_id={sender_id} is_bot={is_bot} date={msg_date} text={repr(text)}")
 
-        weight = extract_weight(msg.get("text", ""))
+        if sender_id != CHAT_ID or is_bot:
+            print(f"  → Overgeslagen (niet de gebruiker of is bot)")
+            continue
+        if msg_date < cutoff_ts:
+            print(f"  → Overgeslagen (te oud: {msg_date} < {cutoff_ts})")
+            continue
+
+        weight = extract_weight(text)
+        print(f"  → Gewicht gevonden: {weight}")
         if weight is not None:
             gewicht = weight
             break
