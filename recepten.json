@@ -12,5 +12,19 @@
     "vetten": 10,
     "vezels": 8,
     "macros_bron": "ai"
+  },
+  "rijst_met_groenten": {
+    "portie": "1 bord ~350g",
+    "ingredienten": [
+      "150g rijst",
+      "200g gemengde groenten",
+      "1 el olijfolie"
+    ],
+    "calories": 420,
+    "eiwitten": 8,
+    "koolhydraten": 70,
+    "vetten": 12,
+    "vezels": 4,
+    "macros_bron": "ai"
   }
 }
