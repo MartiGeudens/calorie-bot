@@ -51,7 +51,9 @@ def load_recipes() -> dict:
 def get_recipe_context(food_text: str, recipes: dict) -> str:
     found = [(naam, d) for naam, d in recipes.items() if naam in food_text.lower()]
     if not found:
+        print("Receptherkenning: geen overeenkomsten gevonden.")
         return ""
+    print(f"Recepten herkend: {', '.join(naam for naam, _ in found)}")
     lines = ["\n\nGebruik deze EXACTE voedingswaarden (niet zelf schatten):"]
     for naam, d in found:
         lines.append(
