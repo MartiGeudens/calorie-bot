@@ -2,7 +2,6 @@ import os
 import re
 import json
 import datetime
-import subprocess
 import requests
 import pytz
 from groq import Groq
@@ -48,15 +47,6 @@ def load_recipes() -> dict:
         return {}
 
 
-def commit_recipes() -> None:
-    subprocess.run(["git", "config", "user.email", "action@github.com"])
-    subprocess.run(["git", "config", "user.name", "Calorie Bot"])
-    subprocess.run(["git", "add", RECIPES_FILE])
-    result = subprocess.run(["git", "diff", "--staged", "--quiet"])
-    if result.returncode != 0:
-        subprocess.run(["git", "commit", "-m", "Recepten bijgewerkt"])
-        subprocess.run(["git", "push"])
-
 
 def get_recipe_context(food_text: str, recipes: dict) -> str:
     found = [(naam, d) for naam, d in recipes.items() if naam in food_text.lower()]
@@ -71,31 +61,6 @@ def get_recipe_context(food_text: str, recipes: dict) -> str:
         )
     return "\n".join(lines)
 
-
-def process_recipe_command(text: str) -> tuple:
-    """Analyseer een RECEPT-commando en sla de voedingswaarden op."""
-    rest = re.sub(r'^recept\s*:?\s*', '', text, flags=re.IGNORECASE).strip()
-
-    prompt = f"""Analyseer dit recept en geef de voedingswaarden PER PORTIE.
-
-Recept: {rest}
-
-Antwoord UITSLUITEND met geldige JSON:
-{{"naam": "", "calories": 0, "eiwitten": 0, "koolhydraten": 0, "vetten": 0, "vezels": 0, "portie": ""}}
-
-- naam: korte naam in lowercase, spaties als underscores (bv "pasta_bolognese")
-- portie: beschrijving van 1 portie (bv "1 bord ~450g")
-- calories/eiwitten/koolhydraten/vetten/vezels: per portie, gehele getallen"""
-
-    response = groq_client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2,
-    )
-    raw = response.choices[0].message.content.strip().replace("```json", "").replace("```", "").strip()
-    data = json.loads(raw)
-    naam = data.pop("naam", rest[:40].lower().replace(" ", "_"))
-    return naam, data
 
 
 # ── Voedingsanalyse ───────────────────────────────────────────────────────────
@@ -138,7 +103,6 @@ def main() -> None:
     today   = datetime.datetime.now(BRUSSELS).strftime("%Y-%m-%d")
     updates = get_updates()
 
-    recipe_commands = []
     food_text = None
 
     for update in reversed(updates):
@@ -152,39 +116,17 @@ def main() -> None:
         if not text:
             continue
 
+        # RECEPT-berichten worden apart verwerkt via de recept-workflow
         if re.match(r'^recept\b', text, re.IGNORECASE):
-            recipe_commands.append(text)
-        elif food_text is None:
+            continue
+
+        if food_text is None:
             food_text = text
 
     clear_updates(updates)
 
-    # Verwerk receptcommando's
-    if recipe_commands:
-        recipes = load_recipes()
-        for cmd in recipe_commands:
-            try:
-                naam, data = process_recipe_command(cmd)
-                recipes[naam] = data
-                send_message(
-                    f"✅ *Recept opgeslagen: {naam}*\n"
-                    f"_{data.get('portie', '1 portie')}: {data['calories']} kcal, "
-                    f"{data['eiwitten']}g eiwit, {data['koolhydraten']}g koolh_"
-                )
-            except Exception as e:
-                print(f"Recept-fout: {e}")
-                send_message("❌ Kon recept niet verwerken. Formaat: `RECEPT naam: ingrediënten`")
-        try:
-            with open(RECIPES_FILE, "w", encoding="utf-8") as f:
-                json.dump(recipes, f, ensure_ascii=False, indent=2)
-            commit_recipes()
-        except Exception as e:
-            print(f"Opslaan recept mislukt: {e}")
-
-    # Verwerk maaltijdlog
     if not food_text:
-        if not recipe_commands:
-            send_message("😔 Geen maaltijden gevonden voor vandaag. Vergeet morgen niet te loggen!")
+        send_message("😔 Geen maaltijden gevonden voor vandaag. Vergeet morgen niet te loggen!")
         return
 
     send_message("⏳ Even analyseren…")
