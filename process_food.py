@@ -123,7 +123,7 @@ def main() -> None:
             continue
 
         # RECEPT-berichten worden apart verwerkt via de recept-workflow
-        if re.match(r'^(/recept|recept)\b', text, re.IGNORECASE):
+        if re.match(r'^(/recept_ai|/recept|recept)\b', text, re.IGNORECASE):
             continue
 
         if food_text is None:
