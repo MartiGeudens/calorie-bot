@@ -14,5 +14,13 @@
     "vetten": 26,
     "vezels": 4,
     "portie": "1 bord ~450g"
+  },
+  "cor_vanille_framboos_banaan_cake": {
+    "calories": 420,
+    "eiwitten": 25,
+    "koolhydraten": 55,
+    "vetten": 17,
+    "vezels": 6,
+    "portie": "1 cake ~250g"
   }
 }
