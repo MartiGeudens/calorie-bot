@@ -46,7 +46,7 @@ def commit_recipes():
 
 
 def process_recipe_command(text):
-    rest = re.sub(r'^recept\s*:?\s*', '', text, flags=re.IGNORECASE).strip()
+    rest = re.sub(r'^(/recept|recept)\s*:?\s*', '', text, flags=re.IGNORECASE).strip()
 
     prompt = f"""Analyseer dit recept en geef de voedingswaarden PER PORTIE.
 
@@ -80,16 +80,12 @@ def main():
         if (msg := update.get("message") or update.get("edited_message"))
         and msg.get("from", {}).get("id") == CHAT_ID
         and not msg.get("from", {}).get("is_bot", False)
-        and re.match(r'^recept\b', msg.get("text", ""), re.IGNORECASE)
+        and re.match(r'^(/recept|recept)\b', msg.get("text", ""), re.IGNORECASE)
     ]
 
     if not recipe_commands:
-        send_message(
-            "ℹ️ Geen recepten gevonden in je berichten.\n\n"
-            "Stuur eerst een bericht naar de bot in dit formaat:\n"
-            "`RECEPT naam: ingrediënten`\n\n"
-            "Bv: `RECEPT pasta bolognese: 200g spaghetti, 150g gehakt, tomatensaus`"
-        )
+        # Stil afsluiten als er niets te verwerken is — geen bericht sturen
+        print("Geen recept-commando's gevonden in de wachtrij.")
         return
 
     recipes = load_recipes()
