@@ -26,5 +26,19 @@
     "vetten": 12,
     "vezels": 4,
     "macros_bron": "ai"
+  },
+  "omelet": {
+    "portie": "1 bord ~150g",
+    "ingredienten": [
+      "3 eieren",
+      "30g kaas",
+      "1 klontje boter"
+    ],
+    "calories": 320,
+    "eiwitten": 24,
+    "koolhydraten": 2,
+    "vetten": 24,
+    "vezels": 0,
+    "macros_bron": "manueel"
   }
 }
