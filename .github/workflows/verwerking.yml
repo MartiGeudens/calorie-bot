@@ -1,9 +1,7 @@
 name: Maaltijden verwerken (00:00)
 
 on:
-  schedule:
-    - cron: '0 22 * * *'   # 00:00 Belgische tijd (CEST = UTC+2)
-  workflow_dispatch:
+  workflow_dispatch:         # Getriggerd door cron-job.org om 00:00
 
 permissions:
   contents: write             # Nodig om recepten.json te committen
