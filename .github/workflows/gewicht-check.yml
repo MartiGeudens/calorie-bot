@@ -1,9 +1,7 @@
 name: Gewicht check (15:00)
 
 on:
-  schedule:
-    - cron: '0 13 * * *'   # 15:00 Belgische tijd (CEST = UTC+2)
-  workflow_dispatch:
+  workflow_dispatch:         # Getriggerd door cron-job.org om 15:00
 
 jobs:
   gewicht-check:
