@@ -3,13 +3,18 @@ name: Maaltijden verwerken (00:00)
 on:
   schedule:
     - cron: '0 22 * * *'   # 00:00 Belgische tijd (CEST = UTC+2)
-  workflow_dispatch:         # Ook handmatig te starten via GitHub (voor testen)
+  workflow_dispatch:
+
+permissions:
+  contents: write             # Nodig om recepten.json te committen
 
 jobs:
   verwerking:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-python@v5
         with:
