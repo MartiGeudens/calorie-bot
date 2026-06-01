@@ -16,11 +16,11 @@
       --text:      #1a1a1a;
       --subtext:   #6b6b6b;
       --accent:    #e07b39;
-      --accent2:   #3a7d44;
       --border:    #e8e0d8;
       --pill-bg:   #f0ebe4;
       --shadow:    0 2px 12px rgba(0,0,0,0.08);
       --header-bg: #1a1a2e;
+      --ingr-bg:   #f8f5f1;
     }
 
     body {
@@ -43,7 +43,6 @@
     header h1 {
       font-size: 1.4rem;
       font-weight: 700;
-      letter-spacing: -0.3px;
       margin-bottom: 12px;
     }
 
@@ -69,7 +68,6 @@
     }
 
     .search-bar input::placeholder { color: rgba(255,255,255,0.5); }
-    .search-icon { color: rgba(255,255,255,0.5); font-size: 1rem; }
 
     /* ── Stats bar ── */
     .stats-bar {
@@ -81,7 +79,6 @@
       overflow-x: auto;
       scrollbar-width: none;
     }
-
     .stats-bar::-webkit-scrollbar { display: none; }
 
     .stat-chip {
@@ -93,7 +90,6 @@
       color: var(--subtext);
       white-space: nowrap;
     }
-
     .stat-chip strong { color: var(--text); }
 
     /* ── Grid ── */
@@ -104,13 +100,8 @@
       padding: 16px;
     }
 
-    @media (min-width: 600px) {
-      .grid { grid-template-columns: 1fr 1fr; }
-    }
-
-    @media (min-width: 900px) {
-      .grid { grid-template-columns: 1fr 1fr 1fr; }
-    }
+    @media (min-width: 600px)  { .grid { grid-template-columns: 1fr 1fr; } }
+    @media (min-width: 900px)  { .grid { grid-template-columns: 1fr 1fr 1fr; } }
 
     /* ── Card ── */
     .card {
@@ -119,14 +110,10 @@
       box-shadow: var(--shadow);
       overflow: hidden;
       border: 1px solid var(--border);
-      cursor: pointer;
-      transition: transform 0.15s, box-shadow 0.15s;
     }
 
-    .card:active { transform: scale(0.98); }
-
     .card-header {
-      background: linear-gradient(135deg, var(--accent), #c0622a);
+      background: linear-gradient(135deg, #e07b39, #c0622a);
       padding: 18px 16px 14px;
     }
 
@@ -140,13 +127,25 @@
       line-height: 1.3;
     }
 
-    .card-portie {
-      font-size: 0.78rem;
-      color: rgba(255,255,255,0.75);
-      margin-top: 3px;
+    .card-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+      flex-wrap: wrap;
     }
 
-    .card-body { padding: 14px 16px; }
+    .card-portie { font-size: 0.78rem; color: rgba(255,255,255,0.75); }
+
+    .bron-badge {
+      font-size: 0.7rem;
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+      border-radius: 20px;
+      padding: 2px 8px;
+    }
+
+    .card-body { padding: 14px 16px 0; }
 
     .kcal-row {
       display: flex;
@@ -168,6 +167,7 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 6px;
+      margin-bottom: 12px;
     }
 
     .macro {
@@ -184,18 +184,75 @@
       margin-bottom: 2px;
     }
 
-    .macro-val {
-      font-size: 0.95rem;
-      font-weight: 700;
-      color: var(--text);
-    }
+    .macro-val { font-size: 0.95rem; font-weight: 700; }
 
     .macro.eiwit  { border-left: 3px solid #3a7d44; }
+    .macro.eiwit  .macro-val { color: #3a7d44; }
     .macro.koolh  { border-left: 3px solid #e0963a; }
+    .macro.koolh  .macro-val { color: #c07a20; }
     .macro.vet    { border-left: 3px solid #e04a3a; }
+    .macro.vet    .macro-val { color: #c0302a; }
     .macro.vezel  { border-left: 3px solid #3a5fa8; }
+    .macro.vezel  .macro-val { color: #3a5fa8; }
 
-    /* ── Empty / loading ── */
+    /* ── Ingrediënten toggle ── */
+    .ingr-toggle {
+      width: 100%;
+      background: var(--ingr-bg);
+      border: none;
+      border-top: 1px solid var(--border);
+      padding: 11px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text);
+      font-family: inherit;
+    }
+
+    .ingr-toggle:hover { background: #f0ebe3; }
+
+    .ingr-toggle .arrow {
+      transition: transform 0.2s;
+      font-size: 0.75rem;
+      color: var(--subtext);
+    }
+
+    .ingr-toggle.open .arrow { transform: rotate(180deg); }
+
+    .ingr-list {
+      display: none;
+      background: var(--ingr-bg);
+      padding: 4px 16px 14px;
+      border-top: 1px dashed var(--border);
+    }
+
+    .ingr-list.open { display: block; }
+
+    .ingr-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.88rem;
+    }
+
+    .ingr-item:last-child { border-bottom: none; }
+
+    .ingr-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .ingr-text { color: var(--text); line-height: 1.4; }
+
+    /* ── Lege/laad states ── */
     .center-msg {
       text-align: center;
       padding: 60px 20px;
@@ -205,10 +262,8 @@
     .center-msg .icon { font-size: 3rem; margin-bottom: 12px; }
     .center-msg p { font-size: 1rem; line-height: 1.6; }
 
-    /* ── No results ── */
     .no-results { display: none; }
 
-    /* ── Footer ── */
     footer {
       text-align: center;
       padding: 24px 16px;
@@ -222,7 +277,7 @@
 <header>
   <h1>🍽️ Mijn <span>Receptenboek</span></h1>
   <div class="search-bar">
-    <span class="search-icon">🔍</span>
+    <span>🔍</span>
     <input type="text" id="search" placeholder="Zoek een recept…" autocomplete="off" />
   </div>
 </header>
@@ -233,12 +288,10 @@
 
 <main>
   <div class="grid" id="grid"></div>
-
   <div class="center-msg no-results" id="noResults">
     <div class="icon">🤷</div>
-    <p>Geen recepten gevonden voor deze zoekopdracht.</p>
+    <p>Geen recepten gevonden.</p>
   </div>
-
   <div class="center-msg" id="loadingMsg">
     <div class="icon">⏳</div>
     <p>Recepten laden…</p>
@@ -250,25 +303,37 @@
 <script>
   const EMOJIS = ["🍝","🥗","🍳","🥩","🍜","🥘","🫕","🍲","🥙","🌮","🍱","🥣","🧆","🫔","🍛","🥞","🍖","🫙","🥚","🧇"];
 
-  function randomEmoji(naam) {
-    const idx = naam.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % EMOJIS.length;
-    return EMOJIS[idx];
+  function emoji(naam) {
+    return EMOJIS[naam.split('').reduce((a,c) => a + c.charCodeAt(0), 0) % EMOJIS.length];
   }
 
-  function formatNaam(naam) {
-    return naam.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  function fmtNaam(naam) {
+    return naam.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
   }
 
   function renderCard(naam, data) {
+    const ingr = data.ingredienten || [];
+    const bron = data.macros_bron === 'manueel' ? '✍️ Manueel' : '🤖 AI';
+
+    const ingrHtml = ingr.length
+      ? ingr.map(i => `
+          <div class="ingr-item">
+            <div class="ingr-dot"></div>
+            <div class="ingr-text">${i}</div>
+          </div>`).join('')
+      : '<div class="ingr-item"><div class="ingr-text" style="color:var(--subtext)">Geen ingrediënten opgeslagen</div></div>';
+
     const card = document.createElement('div');
     card.className = 'card';
     card.dataset.naam = naam.toLowerCase();
-
     card.innerHTML = `
       <div class="card-header">
-        <div class="card-emoji">${randomEmoji(naam)}</div>
-        <div class="card-title">${formatNaam(naam)}</div>
-        <div class="card-portie">📏 ${data.portie || '1 portie'}</div>
+        <div class="card-emoji">${emoji(naam)}</div>
+        <div class="card-title">${fmtNaam(naam)}</div>
+        <div class="card-meta">
+          <span class="card-portie">📏 ${data.portie || '1 portie'}</span>
+          <span class="bron-badge">${bron}</span>
+        </div>
       </div>
       <div class="card-body">
         <div class="kcal-row">
@@ -293,16 +358,19 @@
             <div class="macro-val">${data.vezels} g</div>
           </div>
         </div>
-      </div>`;
+      </div>
+      <button class="ingr-toggle" onclick="toggleIngr(this)">
+        <span>🛒 Ingrediënten (${ingr.length})</span>
+        <span class="arrow">▼</span>
+      </button>
+      <div class="ingr-list">${ingrHtml}</div>`;
 
     return card;
   }
 
-  function calcGemiddelde(recepten) {
-    const vals = Object.values(recepten);
-    if (!vals.length) return null;
-    const avg = k => Math.round(vals.reduce((s, v) => s + (v[k] || 0), 0) / vals.length);
-    return { kcal: avg('calories'), eiwit: avg('eiwitten'), koolh: avg('koolhydraten'), vet: avg('vetten') };
+  function toggleIngr(btn) {
+    btn.classList.toggle('open');
+    btn.nextElementSibling.classList.toggle('open');
   }
 
   async function load() {
@@ -322,38 +390,37 @@
         return;
       }
 
-      // Stats bar
-      const gem = calcGemiddelde(recepten);
+      // Stats
+      const vals = Object.values(recepten);
+      const avg  = k => Math.round(vals.reduce((s,v) => s + (v[k]||0), 0) / vals.length);
       document.getElementById('statsBar').innerHTML = `
         <div class="stat-chip"><strong>${namen.length}</strong> recepten</div>
-        <div class="stat-chip">Gem. <strong>${gem.kcal} kcal</strong></div>
-        <div class="stat-chip">Gem. <strong>${gem.eiwit}g</strong> eiwit</div>
-        <div class="stat-chip">Gem. <strong>${gem.koolh}g</strong> koolh</div>
-        <div class="stat-chip">Gem. <strong>${gem.vet}g</strong> vet</div>`;
+        <div class="stat-chip">Gem. <strong>${avg('calories')} kcal</strong></div>
+        <div class="stat-chip">Gem. <strong>${avg('eiwitten')}g</strong> eiwit</div>
+        <div class="stat-chip">Gem. <strong>${avg('koolhydraten')}g</strong> koolh</div>
+        <div class="stat-chip">Gem. <strong>${avg('vetten')}g</strong> vet</div>`;
 
       // Cards
       const grid = document.getElementById('grid');
-      namen.sort().forEach(naam => {
-        grid.appendChild(renderCard(naam, recepten[naam]));
-      });
+      namen.sort().forEach(naam => grid.appendChild(renderCard(naam, recepten[naam])));
 
-      // Footer
       document.getElementById('footer').textContent =
-        `Laatst bijgewerkt: ${new Date().toLocaleDateString('nl-BE', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+        `Laatste update: ${new Date().toLocaleDateString('nl-BE', {day:'numeric',month:'long',year:'numeric'})}`;
 
       // Search
       document.getElementById('search').addEventListener('input', e => {
-        const q = e.target.value.toLowerCase().replace(/ /g, '_');
+        const q = e.target.value.toLowerCase();
         let found = 0;
         document.querySelectorAll('.card').forEach(card => {
-          const match = card.dataset.naam.includes(q) || card.dataset.naam.replace(/_/g,' ').includes(q);
+          const naam = card.dataset.naam;
+          const match = naam.includes(q) || naam.replace(/_/g,' ').includes(q);
           card.style.display = match ? '' : 'none';
           if (match) found++;
         });
         document.getElementById('noResults').style.display = found === 0 ? 'block' : 'none';
       });
 
-    } catch (err) {
+    } catch(err) {
       document.getElementById('loadingMsg').innerHTML = `
         <div class="icon">❌</div>
         <p>Kon recepten niet laden.<br><small>${err.message}</small></p>`;
