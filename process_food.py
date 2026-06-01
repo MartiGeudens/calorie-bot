@@ -49,7 +49,11 @@ def load_recipes() -> dict:
 
 
 def get_recipe_context(food_text: str, recipes: dict) -> str:
-    found = [(naam, d) for naam, d in recipes.items() if naam in food_text.lower()]
+    food_lower = food_text.lower()
+    found = [
+        (naam, d) for naam, d in recipes.items()
+        if naam in food_lower or naam.replace("_", " ") in food_lower
+    ]
     if not found:
         print("Receptherkenning: geen overeenkomsten gevonden.")
         return ""
