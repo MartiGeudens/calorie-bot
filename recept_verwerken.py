@@ -10,8 +10,9 @@ BOT_TOKEN    = os.environ["BOT_TOKEN"]
 CHAT_ID      = int(os.environ["CHAT_ID"])
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 
-BASE_URL     = f"https://api.telegram.org/bot{BOT_TOKEN}"
-RECIPES_FILE = "recepten.json"
+BASE_URL          = f"https://api.telegram.org/bot{BOT_TOKEN}"
+RECIPES_FILE      = "recepten.json"
+LAST_UPDATE_FILE  = "last_recept_update.txt"
 
 groq_client = Groq(api_key=GROQ_API_KEY)
 
@@ -37,10 +38,18 @@ def load_recipes():
         return {}
 
 
-def commit_recipes():
+def get_last_update_id():
+    try:
+        with open(LAST_UPDATE_FILE) as f:
+            return int(f.read().strip())
+    except Exception:
+        return 0
+
+
+def commit_files():
     subprocess.run(["git", "config", "user.email", "action@github.com"])
     subprocess.run(["git", "config", "user.name", "Calorie Bot"])
-    subprocess.run(["git", "add", RECIPES_FILE])
+    subprocess.run(["git", "add", RECIPES_FILE, LAST_UPDATE_FILE])
     r = subprocess.run(["git", "diff", "--staged", "--quiet"])
     if r.returncode != 0:
         subprocess.run(["git", "commit", "-m", "Recepten bijgewerkt"])
@@ -177,23 +186,29 @@ Antwoord UITSLUITEND met geldige JSON:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
+    last_id = get_last_update_id()
     updates = get_updates()
 
-    recipe_commands = [
-        msg.get("text", "").strip()
-        for update in updates
-        if (msg := update.get("message") or update.get("edited_message"))
+    # Alleen NIEUWE berichten verwerken (update_id > laatste verwerkte)
+    new_updates = [u for u in updates if u["update_id"] > last_id]
+
+    recipe_entries = [
+        (u["update_id"], msg.get("text", "").strip())
+        for u in new_updates
+        if (msg := u.get("message") or u.get("edited_message"))
         and msg.get("from", {}).get("id") == CHAT_ID
         and not msg.get("from", {}).get("is_bot", False)
         and re.match(r'^(/recept_ai|/recept|recept)\b', msg.get("text", ""), re.IGNORECASE)
     ]
 
-    if not recipe_commands:
-        print("Geen recept-commando's gevonden in de wachtrij.")
+    if not recipe_entries:
+        print(f"Geen nieuwe recept-commando's (laatste verwerkt: update_id {last_id}).")
         return
 
+    max_update_id = max(uid for uid, _ in recipe_entries)
+
     recipes = load_recipes()
-    for cmd in recipe_commands:
+    for _, cmd in recipe_entries:
         try:
             naam, data = process_recipe_command(cmd)
             if naam is None:
@@ -223,7 +238,9 @@ def main():
     try:
         with open(RECIPES_FILE, "w", encoding="utf-8") as f:
             json.dump(recipes, f, ensure_ascii=False, indent=2)
-        commit_recipes()
+        with open(LAST_UPDATE_FILE, "w") as f:
+            f.write(str(max_update_id))
+        commit_files()
     except Exception as e:
         print(f"Opslaan mislukt: {e}")
 
