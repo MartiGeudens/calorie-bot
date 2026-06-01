@@ -1,1 +1,16 @@
-
+{
+  "havermout_banaan": {
+    "portie": "1 kom ~350g",
+    "ingredienten": [
+      "80g havermout",
+      "1 banaan",
+      "200ml halfvolle melk"
+    ],
+    "calories": 420,
+    "eiwitten": 15,
+    "koolhydraten": 65,
+    "vetten": 10,
+    "vezels": 8,
+    "macros_bron": "ai"
+  }
+}
