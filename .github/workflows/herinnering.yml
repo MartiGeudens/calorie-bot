@@ -1,9 +1,7 @@
 name: Dagelijkse herinnering (21:00)
 
 on:
-  schedule:
-    - cron: '0 19 * * *'   # 21:00 Belgische tijd (CEST = UTC+2)
-  workflow_dispatch:         # Ook handmatig te starten via GitHub (voor testen)
+  workflow_dispatch:         # Getriggerd door cron-job.org om 21:00
 
 jobs:
   herinnering:
