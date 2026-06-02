@@ -1,1 +1,17 @@
-
+{
+  "jagerschotel": {
+    "portie": "1 bord ~375g",
+    "ingredienten": [
+      "gehakt",
+      "bloemkool",
+      "aardappelpuree",
+      "witte saus (halfvolle melk)"
+    ],
+    "calories": 685,
+    "eiwitten": 37,
+    "koolhydraten": 64,
+    "vetten": 27,
+    "vezels": 0,
+    "macros_bron": "manueel"
+  }
+}
