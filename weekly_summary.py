@@ -83,9 +83,8 @@ def trend_str(this_val: float, prev_val: float) -> str:
     diff = this_val - prev_val
     if diff == 0:
         return "↔ gelijk"
-    sign = "+" if diff > 0 else ""
     arrow = "↑" if diff > 0 else "↓"
-    return f"{arrow} {sign}{int(diff)}"
+    return f"{arrow} {abs(int(diff))}"
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
