@@ -10,7 +10,8 @@ resp = requests.post(
         "chat_id": CHAT_ID,
         "text": (
             "🍽️ *Calorie Tracker* — Goedenavond Marti!\n\n"
-            "Wat heb je vandaag gegeten? Beschrijf je maaltijden in één bericht, bv:\n\n"
+            "Wat heb je vandaag gegeten?\n\n"
+            "Je kan maaltijden doorheen de dag insturen of alles nu in één keer beschrijven. Alles wat je vandaag gestuurd hebt wordt meegenomen! 📋\n\n"
             "_Ontbijt: havermout met banaan_\n"
             "_Lunch: broodje kaas en tomaat_\n"
             "_Avondeten: pasta bolognese_\n"
