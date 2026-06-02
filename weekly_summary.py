@@ -26,18 +26,28 @@ def send_message(text: str) -> None:
 
 # ── Data ophalen ──────────────────────────────────────────────────────────────
 def fetch_data(data_type: str, limit: int) -> list:
-    resp = requests.get(
-        APPS_SCRIPT_URL,
-        params={"type": data_type, "limit": limit},
-        timeout=15,
-        allow_redirects=False,
-    )
+    url = APPS_SCRIPT_URL
+    params = {"type": data_type, "limit": limit}
+    print(f"[DEBUG] GET {url} params={params}")
+
+    resp = requests.get(url, params=params, timeout=15, allow_redirects=False)
+    print(f"[DEBUG] Status: {resp.status_code}")
+    print(f"[DEBUG] Headers: {dict(resp.headers)}")
+    print(f"[DEBUG] Body (500 tekens): {resp.text[:500]}")
+
     if resp.status_code in (301, 302, 303, 307, 308):
-        resp = requests.get(resp.headers.get("Location", ""), timeout=15)
+        redirect_url = resp.headers.get("Location", "")
+        print(f"[DEBUG] Redirect naar: {redirect_url}")
+        resp = requests.get(redirect_url, timeout=15)
+        print(f"[DEBUG] Status na redirect: {resp.status_code}")
+        print(f"[DEBUG] Body na redirect (500 tekens): {resp.text[:500]}")
+
     try:
         result = resp.json()
+        print(f"[DEBUG] JSON geparsed, type={type(result).__name__}, lengte={len(result) if isinstance(result, list) else 'n.v.t.'}")
         return result if isinstance(result, list) else []
-    except Exception:
+    except Exception as e:
+        print(f"[DEBUG] JSON parse mislukt: {e}")
         return []
 
 
