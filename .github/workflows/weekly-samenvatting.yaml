@@ -1,0 +1,25 @@
+name: Wekelijks overzicht (maandag 08:00)
+
+on:
+  workflow_dispatch:         # Getriggerd door cron-job.org elke maandag om 08:00
+
+jobs:
+  weekly-summary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Installeer afhankelijkheden
+        run: pip install requests groq pytz
+
+      - name: Stuur wekelijks overzicht
+        run: python weekly_summary.py
+        env:
+          BOT_TOKEN:       ${{ secrets.BOT_TOKEN }}
+          CHAT_ID:         ${{ secrets.CHAT_ID }}
+          GROQ_API_KEY:    ${{ secrets.GROQ_API_KEY }}
+          APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
