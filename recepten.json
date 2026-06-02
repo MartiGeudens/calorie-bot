@@ -13,5 +13,21 @@
     "vetten": 27,
     "vezels": 0,
     "macros_bron": "manueel"
+  },
+  "vanillecake": {
+    "portie": "1 stuk ~100g",
+    "ingredienten": [
+      "25g boter",
+      "25g kristalsuiker",
+      "1g vanillesuiker",
+      "25g eieren",
+      "25g zelfrijzende bloem"
+    ],
+    "calories": 406,
+    "eiwitten": 5,
+    "koolhydraten": 44,
+    "vetten": 23,
+    "vezels": 0,
+    "macros_bron": "manueel"
   }
 }
