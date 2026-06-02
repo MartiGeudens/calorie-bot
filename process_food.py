@@ -121,12 +121,13 @@ def analyze_food(food_text: str) -> dict:
     prompt = f"""Je bent een voedingsdeskundige. Analyseer de onderstaande maaltijdbeschrijving.
 Gebruik typische Belgische portiegroottes. Wees realistisch, niet optimistisch.{recipe_context}
 
-Maaltijden van vandaag:
+Maaltijden van vandaag (meerdere berichten, chronologisch):
 {food_text}
 
-Categoriseer alles in ontbijt, lunch, avondeten en snacks op basis van labels in de tekst.
-Als er geen label is, schat op basis van voedseltype (bv. havermout = ontbijt, broodje = lunch).
-Als een maaltijdperiode niet gegeten werd, gebruik 0 kcal en lege string.
+Regels:
+1. Categoriseer elke maaltijd in ontbijt, lunch, avondeten of snacks op basis van het label in de tekst (bv. "ontbijt:", "lunch:", "snack:", "avondeten:"). Zonder label: schat op basis van voedseltype.
+2. Elke maaltijd hoort bij exact één periode. Verdeel de calorieën correct: ontbijt.kcal + lunch.kcal + avondeten.kcal + snacks.kcal moet gelijk zijn aan het totale calories-getal.
+3. Als een periode niet gegeten werd: 0 kcal en lege omschrijving.
 
 Antwoord UITSLUITEND met geldige JSON, geen uitleg of markdown:
 {{"ontbijt": {{"kcal": 0, "omschrijving": ""}}, "lunch": {{"kcal": 0, "omschrijving": ""}}, "avondeten": {{"kcal": 0, "omschrijving": ""}}, "snacks": {{"kcal": 0, "omschrijving": ""}}, "calories": 0, "eiwitten": 0, "koolhydraten": 0, "vetten": 0, "vezels": 0, "score": 0, "notitie": ""}}
