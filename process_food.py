@@ -222,7 +222,7 @@ def main() -> None:
         "koolhydraten":   data["koolhydraten"],
         "vetten":         data["vetten"],
         "vezels":         data["vezels"],
-        "score":          f"{data['score']}/10",
+        "score":          data["score"],
         "notities":       data["notitie"],
         "ontbijt_kcal":   ontbijt.get("kcal", 0),
         "lunch_kcal":     lunch.get("kcal", 0),
