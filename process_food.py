@@ -27,7 +27,7 @@ def send_message(text: str) -> None:
 
 
 def get_updates() -> list:
-    resp = requests.get(f"{BASE_URL}/getUpdates?limit=50&timeout=0", timeout=15)
+    resp = requests.get(f"{BASE_URL}/getUpdates?limit=100&timeout=0", timeout=15)
     return resp.json().get("result", [])
 
 
@@ -45,7 +45,6 @@ def load_recipes() -> dict:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
-
 
 
 def get_recipe_context(food_text: str, recipes: dict) -> str:
@@ -68,6 +67,51 @@ def get_recipe_context(food_text: str, recipes: dict) -> str:
     return "\n".join(lines)
 
 
+# ── Berichtfilters ────────────────────────────────────────────────────────────
+def is_weight_message(text: str) -> bool:
+    """Kort bericht dat alleen een getal (30–200) bevat = gewichtsmeting, geen maaltijdlog."""
+    if len(text) > 30:
+        return False
+    match = re.fullmatch(r'\s*(\d+[.,]\d+|\d+)\s*(kg|kilo)?\s*', text, re.IGNORECASE)
+    if match:
+        try:
+            val = float(match.group(1).replace(',', '.'))
+            return 30 <= val <= 200
+        except ValueError:
+            pass
+    return False
+
+
+def collect_food_messages(updates: list) -> list:
+    """Verzamelt alle maaltijdberichten van de afgelopen 24 uur, in chronologische volgorde."""
+    cutoff_ts = datetime.datetime.now(BRUSSELS).timestamp() - 86400
+    food_messages = []
+
+    for update in updates:  # chronologische volgorde bewaren
+        msg = update.get("message") or update.get("edited_message")
+        if not msg:
+            continue
+        sender = msg.get("from", {})
+        if sender.get("id") != CHAT_ID or sender.get("is_bot", False):
+            continue
+        text = msg.get("text", "").strip()
+        if not text:
+            continue
+        # Alleen berichten van de afgelopen 24 uur
+        if msg.get("date", 0) < cutoff_ts:
+            continue
+        # Sla commando's over
+        if text.startswith('/'):
+            continue
+        if re.match(r'^recept\b', text, re.IGNORECASE):
+            continue
+        # Sla gewichtsmetingen over
+        if is_weight_message(text):
+            continue
+        food_messages.append(text)
+
+    return food_messages
+
 
 # ── Voedingsanalyse ───────────────────────────────────────────────────────────
 def analyze_food(food_text: str) -> dict:
@@ -77,12 +121,19 @@ def analyze_food(food_text: str) -> dict:
     prompt = f"""Je bent een voedingsdeskundige. Analyseer de onderstaande maaltijdbeschrijving.
 Gebruik typische Belgische portiegroottes. Wees realistisch, niet optimistisch.{recipe_context}
 
-Maaltijden: {food_text}
+Maaltijden van vandaag:
+{food_text}
+
+Categoriseer alles in ontbijt, lunch, avondeten en snacks op basis van labels in de tekst.
+Als er geen label is, schat op basis van voedseltype (bv. havermout = ontbijt, broodje = lunch).
+Als een maaltijdperiode niet gegeten werd, gebruik 0 kcal en lege string.
 
 Antwoord UITSLUITEND met geldige JSON, geen uitleg of markdown:
-{{"calories": 0, "eiwitten": 0, "koolhydraten": 0, "vetten": 0, "vezels": 0, "score": 0, "notitie": ""}}
+{{"ontbijt": {{"kcal": 0, "omschrijving": ""}}, "lunch": {{"kcal": 0, "omschrijving": ""}}, "avondeten": {{"kcal": 0, "omschrijving": ""}}, "snacks": {{"kcal": 0, "omschrijving": ""}}, "calories": 0, "eiwitten": 0, "koolhydraten": 0, "vetten": 0, "vezels": 0, "score": 0, "notitie": ""}}
 
-- calories: totale kcal (geheel getal)
+- ontbijt/lunch/avondeten/snacks.kcal: calorieën voor die periode (geheel getal, 0 indien niet gegeten)
+- ontbijt/lunch/avondeten/snacks.omschrijving: korte beschrijving (leeg indien niet gegeten)
+- calories: totale kcal voor de dag (geheel getal)
 - eiwitten / koolhydraten / vetten / vezels: gram (gehele getallen)
 - score: 1–10 voor hoe gezond en gevarieerd de dag was
 - notitie: één zin met een observatie of tip"""
@@ -109,31 +160,15 @@ def main() -> None:
     today   = datetime.datetime.now(BRUSSELS).strftime("%Y-%m-%d")
     updates = get_updates()
 
-    food_text = None
-
-    for update in reversed(updates):
-        msg = update.get("message") or update.get("edited_message")
-        if not msg:
-            continue
-        sender = msg.get("from", {})
-        if sender.get("id") != CHAT_ID or sender.get("is_bot", False):
-            continue
-        text = msg.get("text", "").strip()
-        if not text:
-            continue
-
-        # RECEPT-berichten worden apart verwerkt via de recept-workflow
-        if re.match(r'^(/recept_ai|/recept|recept)\b', text, re.IGNORECASE):
-            continue
-
-        if food_text is None:
-            food_text = text
-
+    food_messages = collect_food_messages(updates)
     clear_updates(updates)
 
-    if not food_text:
+    if not food_messages:
         send_message("😔 Geen maaltijden gevonden voor vandaag. Vergeet morgen niet te loggen!")
         return
+
+    food_text = "\n".join(food_messages)
+    print(f"Maaltijdberichten gevonden: {len(food_messages)}\n{food_text}")
 
     send_message("⏳ Even analyseren…")
 
@@ -144,9 +179,28 @@ def main() -> None:
         send_message("❌ Analyse mislukt. Probeer morgen opnieuw of beschrijf je maaltijden wat duidelijker.")
         return
 
+    # Per-maaltijd overzicht opbouwen
+    meal_lines = ""
+    for key, label, emoji in [
+        ("ontbijt",   "Ontbijt",   "🌅"),
+        ("lunch",     "Lunch",     "☀️"),
+        ("avondeten", "Avondeten", "🌙"),
+        ("snacks",    "Snacks",    "🍎"),
+    ]:
+        meal = data.get(key, {})
+        kcal = meal.get("kcal", 0)
+        omschr = meal.get("omschrijving", "")
+        if kcal and kcal > 0:
+            line = f"{emoji} {label}: {kcal} kcal"
+            if omschr:
+                line += f" — _{omschr}_"
+            meal_lines += line + "\n"
+
     send_message(
         f"📊 *Voedingsoverzicht — {today}*\n\n"
-        f"🔥 Calorieën: *{data['calories']} kcal*\n"
+        f"{meal_lines}\n"
+        f"━━━━━━━━━━━━━━\n"
+        f"🔥 Totaal: *{data['calories']} kcal*\n"
         f"💪 Eiwitten: {data['eiwitten']} g\n"
         f"🌾 Koolhydraten: {data['koolhydraten']} g\n"
         f"🥑 Vetten: {data['vetten']} g\n"
@@ -155,12 +209,25 @@ def main() -> None:
         f"💬 _{data['notitie']}_"
     )
 
+    ontbijt = data.get("ontbijt", {})
+    lunch   = data.get("lunch", {})
+    avond   = data.get("avondeten", {})
+    snacks  = data.get("snacks", {})
+
     if save_to_sheets({
-        "datum": today, "maaltijden": food_text,
-        "calories": data["calories"], "eiwitten": data["eiwitten"],
-        "koolhydraten": data["koolhydraten"], "vetten": data["vetten"],
-        "vezels": data["vezels"], "score": f"{data['score']}/10",
-        "notities": data["notitie"],
+        "datum":          today,
+        "maaltijden":     food_text,
+        "calories":       data["calories"],
+        "eiwitten":       data["eiwitten"],
+        "koolhydraten":   data["koolhydraten"],
+        "vetten":         data["vetten"],
+        "vezels":         data["vezels"],
+        "score":          f"{data['score']}/10",
+        "notities":       data["notitie"],
+        "ontbijt_kcal":   ontbijt.get("kcal", 0),
+        "lunch_kcal":     lunch.get("kcal", 0),
+        "avondeten_kcal": avond.get("kcal", 0),
+        "snacks_kcal":    snacks.get("kcal", 0),
     }):
         send_message("✅ Opgeslagen in je Google Spreadsheet!")
     else:
