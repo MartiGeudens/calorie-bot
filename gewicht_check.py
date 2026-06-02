@@ -42,6 +42,45 @@ def extract_weight(text):
     return None
 
 
+def calculate_streak(data_type: str) -> int:
+    """Berekent de huidige aaneengesloten streak van gelogde dagen."""
+    try:
+        resp = requests.get(
+            APPS_SCRIPT_URL,
+            params={"type": data_type, "limit": 60},
+            timeout=15,
+            allow_redirects=False,
+        )
+        if resp.status_code in (301, 302, 303, 307, 308):
+            resp = requests.get(resp.headers.get("Location", ""), timeout=15)
+        rows = resp.json()
+        if not isinstance(rows, list):
+            return 0
+    except Exception:
+        return 0
+    logged_dates = {r.get("datum", "") for r in rows if isinstance(r, dict)}
+    streak = 0
+    check_date = datetime.datetime.now(BRUSSELS).date()
+    while check_date.strftime("%Y-%m-%d") in logged_dates:
+        streak += 1
+        check_date -= datetime.timedelta(days=1)
+    return streak
+
+
+def streak_tekst(streak: int) -> str:
+    if streak < 2:
+        return ""
+    if streak >= 30:
+        emoji = "🔥🔥🔥"
+    elif streak >= 14:
+        emoji = "🔥🔥"
+    elif streak >= 7:
+        emoji = "🔥"
+    else:
+        emoji = "⚡"
+    return f"{emoji} *{streak} dagen op rij gewicht gelogd!*"
+
+
 def save_weight(datum, gewicht):
     payload = {"type": "gewicht", "datum": datum, "gewicht": gewicht}
     resp = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15, allow_redirects=False)
@@ -79,7 +118,12 @@ def main():
         return
 
     if save_weight(today, gewicht):
-        send_message(f"⚖️ Gewicht opgeslagen: *{gewicht} kg* ✅")
+        streak = calculate_streak("gewicht")
+        msg = f"⚖️ Gewicht opgeslagen: *{gewicht} kg* ✅"
+        tekst = streak_tekst(streak)
+        if tekst:
+            msg += f"\n{tekst}"
+        send_message(msg)
     else:
         send_message(f"⚖️ Gewicht ontvangen ({gewicht} kg) maar opslaan mislukte.")
 
