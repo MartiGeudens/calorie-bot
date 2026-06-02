@@ -187,6 +187,26 @@ def streak_tekst(streak: int) -> str:
     return f"{emoji} *{streak} dagen op rij maaltijden gelogd!*"
 
 
+# ── Lage score alert ─────────────────────────────────────────────────────────
+def stuur_score_alert(food_text: str, score: int) -> None:
+    """Stuurt een extra gerichte tip als de dagelijkse score onder 5 valt."""
+    try:
+        resp = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": (
+                f"Maaltijden van vandaag (score {score}/10):\n{food_text}\n\n"
+                "Geef één concrete, budgetvriendelijke tip om de voedingskwaliteit morgen te verbeteren. "
+                "Max 2 zinnen, Nederlands, direct en praktisch. Geen aanhef."
+            )}],
+            temperature=0.5,
+            max_tokens=120,
+        )
+        tip = resp.choices[0].message.content.strip()
+        send_message(f"💡 *Tip voor morgen:*\n_{tip}_")
+    except Exception as e:
+        print(f"Score alert mislukt: {e}")
+
+
 # ── Opslaan in Google Sheets ──────────────────────────────────────────────────
 def save_to_sheets(payload: dict) -> bool:
     resp = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15, allow_redirects=False)
@@ -253,6 +273,9 @@ def main() -> None:
     lunch   = data.get("lunch", {})
     avond   = data.get("avondeten", {})
     snacks  = data.get("snacks", {})
+
+    if data['score'] < 5:
+        stuur_score_alert(food_text, data['score'])
 
     streak = calculate_streak("maaltijden")
 
