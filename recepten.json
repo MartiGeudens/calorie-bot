@@ -29,5 +29,20 @@
     "vetten": 23,
     "vezels": 0,
     "macros_bron": "manueel"
+  },
+  "lunch_kipcurry": {
+    "portie": "1 bord ~150g",
+    "ingredienten": [
+      "4 bruine boterhammen",
+      "80g kipfilet",
+      "30g mayo",
+      "1g currypoeder"
+    ],
+    "calories": 628,
+    "eiwitten": 31,
+    "koolhydraten": 49,
+    "vetten": 28,
+    "vezels": 0,
+    "macros_bron": "manueel"
   }
 }
