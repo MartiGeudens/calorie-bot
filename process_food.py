@@ -147,6 +147,46 @@ Antwoord UITSLUITEND met geldige JSON, geen uitleg of markdown:
     return json.loads(raw)
 
 
+# ── Streak ───────────────────────────────────────────────────────────────────
+def calculate_streak(data_type: str) -> int:
+    """Berekent de huidige aaneengesloten streak van gelogde dagen."""
+    try:
+        resp = requests.get(
+            APPS_SCRIPT_URL,
+            params={"type": data_type, "limit": 60},
+            timeout=15,
+            allow_redirects=False,
+        )
+        if resp.status_code in (301, 302, 303, 307, 308):
+            resp = requests.get(resp.headers.get("Location", ""), timeout=15)
+        rows = resp.json()
+        if not isinstance(rows, list):
+            return 0
+    except Exception:
+        return 0
+    logged_dates = {r.get("datum", "") for r in rows if isinstance(r, dict)}
+    streak = 0
+    check_date = datetime.datetime.now(BRUSSELS).date()
+    while check_date.strftime("%Y-%m-%d") in logged_dates:
+        streak += 1
+        check_date -= datetime.timedelta(days=1)
+    return streak
+
+
+def streak_tekst(streak: int) -> str:
+    if streak < 2:
+        return ""
+    if streak >= 30:
+        emoji = "🔥🔥🔥"
+    elif streak >= 14:
+        emoji = "🔥🔥"
+    elif streak >= 7:
+        emoji = "🔥"
+    else:
+        emoji = "⚡"
+    return f"{emoji} *{streak} dagen op rij maaltijden gelogd!*"
+
+
 # ── Opslaan in Google Sheets ──────────────────────────────────────────────────
 def save_to_sheets(payload: dict) -> bool:
     resp = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15, allow_redirects=False)
@@ -214,6 +254,8 @@ def main() -> None:
     avond   = data.get("avondeten", {})
     snacks  = data.get("snacks", {})
 
+    streak = calculate_streak("maaltijden")
+
     if save_to_sheets({
         "datum":          today,
         "maaltijden":     food_text,
@@ -229,7 +271,11 @@ def main() -> None:
         "avondeten_kcal": avond.get("kcal", 0),
         "snacks_kcal":    snacks.get("kcal", 0),
     }):
-        send_message("✅ Opgeslagen in je Google Spreadsheet!")
+        msg = "✅ Opgeslagen in je Google Spreadsheet!"
+        tekst = streak_tekst(streak)
+        if tekst:
+            msg += f"\n{tekst}"
+        send_message(msg)
     else:
         send_message("⚠️ Analyse gelukt, maar opslaan in spreadsheet mislukte.")
 
