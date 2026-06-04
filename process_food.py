@@ -12,9 +12,10 @@ CHAT_ID         = int(os.environ["CHAT_ID"])
 GROQ_API_KEY    = os.environ["GROQ_API_KEY"]
 APPS_SCRIPT_URL = os.environ["APPS_SCRIPT_URL"]
 
-BRUSSELS     = pytz.timezone("Europe/Brussels")
-BASE_URL     = f"https://api.telegram.org/bot{BOT_TOKEN}"
-RECIPES_FILE = "recepten.json"
+BRUSSELS          = pytz.timezone("Europe/Brussels")
+BASE_URL          = f"https://api.telegram.org/bot{BOT_TOKEN}"
+RECIPES_FILE      = "recepten.json"
+LAST_UPDATE_FILE  = "last_food_update.txt"
 
 groq_client = Groq(api_key=GROQ_API_KEY)
 
@@ -26,9 +27,39 @@ def send_message(text: str) -> None:
     }, timeout=10)
 
 
+def get_last_update_id() -> int:
+    try:
+        with open(LAST_UPDATE_FILE) as f:
+            return int(f.read().strip())
+    except Exception:
+        return 0
+
+
+def save_last_update_id(update_id: int) -> None:
+    with open(LAST_UPDATE_FILE, "w") as f:
+        f.write(str(update_id))
+
+
 def get_updates() -> list:
-    resp = requests.get(f"{BASE_URL}/getUpdates?limit=100&timeout=0", timeout=15)
-    return resp.json().get("result", [])
+    """Haalt alle updates op sinds de laatste verwerkte update_id."""
+    last_id = get_last_update_id()
+    all_updates = []
+    offset = last_id + 1 if last_id > 0 else None
+
+    while True:
+        url = f"{BASE_URL}/getUpdates?limit=100&timeout=0"
+        if offset:
+            url += f"&offset={offset}"
+        resp = requests.get(url, timeout=15)
+        batch = resp.json().get("result", [])
+        if not batch:
+            break
+        all_updates.extend(batch)
+        if len(batch) < 100:
+            break
+        offset = batch[-1]["update_id"] + 1
+
+    return all_updates
 
 
 def clear_updates(updates: list) -> None:
@@ -36,6 +67,7 @@ def clear_updates(updates: list) -> None:
         return
     last_id = max(u["update_id"] for u in updates)
     requests.get(f"{BASE_URL}/getUpdates?offset={last_id + 1}&timeout=0", timeout=15)
+    save_last_update_id(last_id)
 
 
 # ── Recepten ──────────────────────────────────────────────────────────────────
