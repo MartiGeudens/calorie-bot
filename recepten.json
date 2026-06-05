@@ -103,5 +103,21 @@
     "vetten": 22,
     "vezels": 0,
     "macros_bron": "manueel"
+  },
+  "cannelloni_gehakt_spinazie": {
+    "portie": "1 bord ~350g",
+    "ingredienten": [
+      "4 cannellonibuisjes",
+      "100g rundergehakt",
+      "1 ui",
+      "50g spinazie",
+      "100g bechamelsaus"
+    ],
+    "calories": 650,
+    "eiwitten": 32,
+    "koolhydraten": 55,
+    "vetten": 28,
+    "vezels": 0,
+    "macros_bron": "manueel"
   }
 }
