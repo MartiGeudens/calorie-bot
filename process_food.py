@@ -171,13 +171,18 @@ Antwoord UITSLUITEND met geldige JSON, geen uitleg of markdown:
 - score: 1–10 voor hoe gezond en gevarieerd de dag was
 - notitie: één zin met een observatie of tip"""
 
-    response = groq_client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3,
-    )
-    raw = response.choices[0].message.content.strip().replace("```json", "").replace("```", "").strip()
-    return json.loads(raw)
+    for attempt in range(3):
+        response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+        )
+        raw = response.choices[0].message.content.strip().replace("```json", "").replace("```", "").strip()
+        data = json.loads(raw)
+        if data.get("calories", 0) > 0:
+            return data
+        print(f"Analyse poging {attempt + 1}: AI gaf 0 kcal terug, opnieuw proberen...")
+    return data  # geef laatste resultaat terug na 3 mislukte pogingen
 
 
 # ── Streak ───────────────────────────────────────────────────────────────────
