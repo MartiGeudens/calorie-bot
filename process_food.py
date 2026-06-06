@@ -17,6 +17,13 @@ BASE_URL          = f"https://api.telegram.org/bot{BOT_TOKEN}"
 RECIPES_FILE      = "recepten.json"
 LAST_UPDATE_FILE  = "last_food_update.txt"
 
+# Dagelijkse macrodoelen
+DOEL_KCAL  = 2750
+DOEL_EIWIT = 150
+DOEL_KOOLH = 320
+DOEL_VET   = 85
+DOEL_VEZEL = 30
+
 groq_client = Groq(api_key=GROQ_API_KEY)
 
 
@@ -159,7 +166,16 @@ def analyze_food(food_text: str) -> dict:
     recipe_context = get_recipe_context(food_text, recipes)
 
     prompt = f"""Je bent een voedingsdeskundige. Analyseer de onderstaande maaltijdbeschrijving.
-Gebruik typische Belgische portiegroottes. Wees realistisch, niet optimistisch.{recipe_context}
+Gebruik typische Belgische portiegroottes. Wees realistisch, niet optimistisch.
+
+Dagelijkse doelen van deze persoon:
+- Calorieën: {DOEL_KCAL} kcal
+- Eiwitten: {DOEL_EIWIT}g
+- Koolhydraten: {DOEL_KOOLH}g
+- Vetten: {DOEL_VET}g
+- Vezels: {DOEL_VEZEL}g
+
+Gebruik deze doelen als referentie voor de score (1–10) en de notitie. Een score van 10 = doelen perfect behaald.{recipe_context}
 
 Maaltijden van vandaag (meerdere berichten, chronologisch):
 {food_text}
