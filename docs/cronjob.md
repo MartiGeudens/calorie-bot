@@ -41,8 +41,8 @@ For each row in the table below, create one job in cron-job.org.
 | Herinnering | `.../herinnering.yml/dispatches` | Daily at 21:00 |
 | Verwerking | `.../verwerking.yml/dispatches` | Daily at 00:00 |
 | Wekelijks overzicht | `.../weekly-samenvatting.yaml/dispatches` | Monday at 08:00 |
-| Tips check | `.../tips-check.yml/dispatches` | Every 10 min: `*/10 * * * *` |
-| Recept check | `.../recept-check.yml/dispatches` | Every 30 min staggered: `1,31 * * * *` |
+| Tips check | `.../tips-check.yml/dispatches` | Every 10 min staggered: `9,19,29,39,49,59 * * * *` |
+| Recept check | `.../recept-check.yml/dispatches` | Every 30 min staggered: `5,35 * * * *` |
 
 **Full URL base** (replace `...` above):
 ```
@@ -61,5 +61,5 @@ After saving a job, click **Run now**. The response should be HTTP **204**. If y
 ## Notes
 
 - The Tips check and Recept check run frequently. This is fine — GitHub Actions minutes are free for public repositories.
-- The staggered timing for recept-check (`1,31`) prevents it from running at the exact same minute as tips-check.
+- The staggered timing for recept-check (`5,35`) prevents it from running at the exact same minute as tips-check.
 - If you rename a workflow file, update the URL in cron-job.org to match.
