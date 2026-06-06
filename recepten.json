@@ -45,25 +45,6 @@
     "vezels": 0,
     "macros_bron": "manueel"
   },
-  "hartige_yoghurtbowl": {
-    "portie": "1 bord ~550g",
-    "ingredienten": [
-      "200g Griekse yoghurt",
-      "2 eieren zachtgekookt",
-      "100g rundergehakt",
-      "100g komkommer",
-      "10g chiazaad",
-      "50g cherrytomaten",
-      "olijfolie",
-      "zout"
-    ],
-    "calories": 650,
-    "eiwitten": 51,
-    "koolhydraten": 18,
-    "vetten": 32,
-    "vezels": 0,
-    "macros_bron": "manueel"
-  },
   "hartige_yoghurtbowl_gehakt": {
     "portie": "1 bord ~550g",
     "ingredienten": [
