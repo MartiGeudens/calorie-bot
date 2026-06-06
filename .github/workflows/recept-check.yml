@@ -1,7 +1,7 @@
 name: Recept toevoegen
 
 on:
-  workflow_dispatch:  # Getriggerd door cron-job.org (elke 15 minuten)
+  workflow_dispatch:  # Getriggerd door cron-job.org (elke 30 minuten)
 
 permissions:
   contents: write

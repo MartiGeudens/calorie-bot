@@ -88,6 +88,10 @@ def main():
  updates = get_updates()
  print(f"Aantal updates: {len(updates)}")
 
+ start_of_day = datetime.datetime.now(BRUSSELS).replace(
+ hour=0, minute=0, second=0, microsecond=0
+ ).timestamp()
+
  gewicht = None
 
  for update in reversed(updates):
@@ -96,6 +100,8 @@ def main():
  continue
  sender = msg.get("from", {})
  if sender.get("id") != CHAT_ID or sender.get("is_bot", False):
+ continue
+ if msg.get("date", 0) < start_of_day:
  continue
 
  weight = extract_weight(msg.get("text", ""))

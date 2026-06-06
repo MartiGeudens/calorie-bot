@@ -73,12 +73,15 @@ def get_recipe_context(food_text: str, recipes: dict) -> str:
  ]
  if not found:
  return ""
- lines = ["\n\nVoor de onderstaande herkende recepten gebruik je EXACT deze voedingswaarden:"]
+ lines = [
+ "\n\nVoor de onderstaande herkende recepten gebruik je EXACT deze voedingswaarden.",
+ "Schat alle overige maaltijden zelf in op basis van typische Belgische portiegroottes:"
+ ]
  for naam, d in found:
  lines.append(
  f"- {naam} (per {d.get('portie', 'portie')}): "
  f"{d['calories']} kcal, {d['eiwitten']}g eiwit, "
- f"{d['koolhydraten']}g koolh, {d['vetten']}g vet"
+ f"{d['koolhydraten']}g koolh, {d['vetten']}g vet, {d['vezels']}g vezels"
  )
  return "\n".join(lines)
 
@@ -231,3 +234,26 @@ def main() -> None:
  budget_lijn = f"Nog *{rest_kcal} kcal* over van je {DOEL_KCAL} kcal doel"
  else:
  budget_lijn = f"Je zit *{abs(rest_kcal)} kcal boven* je {DOEL_KCAL} kcal doel"
+
+ tips_tekst = "\n".join(f"• {t}" for t in tips_list) if tips_list else "Geen specifieke aanbevelingen."
+
+ message = (
+ f"*Calorie Tips — {now.strftime('%H:%M')}*\n\n"
+ f"_{samen}_\n\n"
+ f"{budget_lijn}\n\n"
+ f"*Macro's tot nu toe:*\n"
+ f"{macro_lijn('Eiwitten', eiwitten, DOEL_EIWIT)}\n"
+ f"{macro_lijn('Koolh.', koolh, DOEL_KOOLH)}\n"
+ f"{macro_lijn('Vetten', vetten, DOEL_VET)}\n"
+ f"{macro_lijn('Vezels', vezels, DOEL_VEZEL)}\n\n"
+ f"*Suggesties voor de rest van de dag:*\n"
+ f"{tips_tekst}"
+ )
+
+ send_message(message)
+ save_last_tips_id(max_tips_id)
+ commit_tips_file()
+
+
+if __name__ == "__main__":
+ main()
