@@ -29,17 +29,14 @@ DOEL_VEZEL = _cfg["vezels"]
 
 groq_client = Groq(api_key=GROQ_API_KEY)
 
-
 def send_message(text: str) -> None:
     requests.post(f"{BASE_URL}/sendMessage", json={
         "chat_id": CHAT_ID, "text": text, "parse_mode": "Markdown",
     }, timeout=10)
 
-
 def get_updates_readonly() -> list:
     resp = requests.get(f"{BASE_URL}/getUpdates?limit=100&timeout=0", timeout=15)
     return resp.json().get("result", [])
-
 
 def get_last_tips_id() -> int:
     try:
@@ -48,11 +45,9 @@ def get_last_tips_id() -> int:
     except Exception:
         return 0
 
-
 def save_last_tips_id(uid: int) -> None:
     with open(LAST_TIPS_UPDATE_FILE, "w") as f:
         f.write(str(uid))
-
 
 def commit_tips_file() -> None:
     subprocess.run(["git", "config", "user.email", "action@github.com"])
@@ -63,14 +58,12 @@ def commit_tips_file() -> None:
         subprocess.run(["git", "commit", "-m", "Tips update bijgewerkt"])
         subprocess.run(["git", "push"])
 
-
 def load_recipes() -> dict:
     try:
         with open(RECIPES_FILE, encoding="utf-8") as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
-
 
 def get_recipe_context(food_text: str, recipes: dict) -> str:
     food_norm = re.sub(r'[-_]', ' ', food_text.lower())
@@ -89,7 +82,6 @@ def get_recipe_context(food_text: str, recipes: dict) -> str:
         )
     return "\n".join(lines)
 
-
 def is_weight_message(text: str) -> bool:
     if len(text) > 30:
         return False
@@ -101,7 +93,6 @@ def is_weight_message(text: str) -> bool:
         except ValueError:
             pass
     return False
-
 
 def collect_today_food(updates: list) -> list:
     now = datetime.datetime.now(BRUSSELS)
@@ -129,7 +120,6 @@ def collect_today_food(updates: list) -> list:
         food_messages.append(text)
 
     return food_messages
-
 
 def analyze_partial_day(food_text: str) -> dict:
     recipes = load_recipes()
@@ -171,7 +161,6 @@ Antwoord UITSLUITEND met geldige JSON, geen uitleg of markdown:
             return data
         print(f"Tips analyse poging {attempt + 1}: 0 kcal, opnieuw proberen...")
     return data
-
 
 def main() -> None:
     last_tips_id = get_last_tips_id()
