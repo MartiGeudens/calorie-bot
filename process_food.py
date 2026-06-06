@@ -79,17 +79,25 @@ def load_recipes() -> dict:
         return {}
 
 
+def normalize(text: str) -> str:
+    """Normaliseert tekst voor receptherkenning: lowercase, koppeltekens en underscores → spaties."""
+    return re.sub(r'[-_]', ' ', text.lower())
+
+
 def get_recipe_context(food_text: str, recipes: dict) -> str:
-    food_lower = food_text.lower()
+    food_norm = normalize(food_text)
     found = [
         (naam, d) for naam, d in recipes.items()
-        if naam in food_lower or naam.replace("_", " ") in food_lower
+        if normalize(naam) in food_norm
     ]
     if not found:
         print("Receptherkenning: geen overeenkomsten gevonden.")
         return ""
     print(f"Recepten herkend: {', '.join(naam for naam, _ in found)}")
-    lines = ["\n\nGebruik deze EXACTE voedingswaarden (niet zelf schatten):"]
+    lines = [
+        "\n\nVoor de onderstaande herkende recepten gebruik je EXACT deze voedingswaarden.",
+        "Schat alle overige maaltijden zelf in op basis van typische Belgische portiegroottes:"
+    ]
     for naam, d in found:
         lines.append(
             f"- {naam} (per {d.get('portie', 'portie')}): "
