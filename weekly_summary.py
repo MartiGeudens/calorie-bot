@@ -16,6 +16,13 @@ BRUSSELS    = pytz.timezone("Europe/Brussels")
 BASE_URL    = f"https://api.telegram.org/bot{BOT_TOKEN}"
 groq_client = Groq(api_key=GROQ_API_KEY)
 
+# Dagelijkse macrodoelen
+DOEL_KCAL  = 2750
+DOEL_EIWIT = 150
+DOEL_KOOLH = 320
+DOEL_VET   = 85
+DOEL_VEZEL = 30
+
 
 # ── Telegram ──────────────────────────────────────────────────────────────────
 def send_message(text: str) -> None:
@@ -150,17 +157,34 @@ def main() -> None:
     elif gew_vals:
         gewicht_tekst = f"\n⚖️ Huidig gewicht: {gew_vals[-1]} kg\n"
 
+    # vs.-doel vergelijking
+    def doel_diff(gemiddelde, doel):
+        diff = gemiddelde - doel
+        if abs(diff) <= doel * 0.05:
+            return "✅ op doel"
+        return f"{'↑' if diff > 0 else '↓'} {abs(int(diff))} {'te veel' if diff > 0 else 'te weinig'}"
+
+    doel_blok = (
+        f"\n🎯 *Vs. jouw doelen ({DOEL_KCAL} kcal):*\n"
+        f"  🔥 Calorieën: {avg_cal} kcal — {doel_diff(avg_cal, DOEL_KCAL)}\n"
+        f"  💪 Eiwitten:  {avg_eiwit}g — {doel_diff(avg_eiwit, DOEL_EIWIT)}\n"
+        f"  🌾 Koolh:     {avg_koolh}g — {doel_diff(avg_koolh, DOEL_KOOLH)}\n"
+        f"  🥑 Vetten:    {avg_vet}g — {doel_diff(avg_vet, DOEL_VET)}\n"
+        f"  🥦 Vezels:    {avg_vezel}g — {doel_diff(avg_vezel, DOEL_VEZEL)}\n"
+    )
+
     # AI-tip over de week
     recent_notes = [r.get("notities", "") for r in this_week if r.get("notities")]
     context_for_ai = (
-        f"Gemiddeld {avg_cal} kcal/dag, {avg_eiwit}g eiwit, score {avg_score}/10. "
+        f"Doelen: {DOEL_KCAL} kcal, {DOEL_EIWIT}g eiwit, {DOEL_KOOLH}g koolh, {DOEL_VET}g vet, {DOEL_VEZEL}g vezels. "
+        f"Gemiddeld deze week: {avg_cal} kcal, {avg_eiwit}g eiwit, score {avg_score}/10. "
         f"Notities: {'; '.join(recent_notes[-3:]) if recent_notes else 'geen'}."
     )
     try:
         ai_resp = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": (
-                f"Geef één korte motiverende tip (max 2 zinnen) over deze voedingsweek: {context_for_ai} "
+                f"Geef één korte motiverende tip (max 2 zinnen) over deze voedingsweek met focus op het belangrijkste verbeterpunt t.o.v. de doelen: {context_for_ai} "
                 "Schrijf in het Nederlands, casual en persoonlijk. Geen aanhef."
             )}],
             temperature=0.7,
@@ -188,7 +212,7 @@ def main() -> None:
     if meal_lines:
         message += f"\n🍽️ *Verdeling per maaltijd:*\n{meal_lines}"
 
-    message += f"{prev_blok}\n💬 _{ai_tip}_"
+    message += f"{doel_blok}{prev_blok}\n💬 _{ai_tip}_"
 
     send_message(message)
 
