@@ -339,7 +339,7 @@
 
   async function load() {
     try {
-      const resp = await fetch('recepten.json?v=' + Date.now());
+      const resp = await fetch('data/config/recepten.json?v=' + Date.now());
       allRecepten = await resp.json();
       const namen = Object.keys(allRecepten);
 

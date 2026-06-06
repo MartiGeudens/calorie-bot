@@ -17,7 +17,7 @@ jobs:
         run: pip install requests groq pytz
 
       - name: Stuur wekelijks overzicht
-        run: python weekly_summary.py
+        run: python scripts/weekly_summary.py
         env:
           BOT_TOKEN:       ${{ secrets.BOT_TOKEN }}
           CHAT_ID:         ${{ secrets.CHAT_ID }}

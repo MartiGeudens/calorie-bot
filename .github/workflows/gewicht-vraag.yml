@@ -17,7 +17,7 @@ jobs:
         run: pip install requests
 
       - name: Stuur gewichtsvraag
-        run: python gewicht_vraag.py
+        run: python scripts/gewicht_vraag.py
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID:   ${{ secrets.CHAT_ID }}

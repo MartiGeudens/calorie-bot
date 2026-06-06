@@ -17,7 +17,7 @@ jobs:
         run: pip install requests
 
       - name: Stuur herinnering
-        run: python remind.py
+        run: python scripts/remind.py
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID:   ${{ secrets.CHAT_ID }}

@@ -14,17 +14,14 @@ BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 def today_str():
     return datetime.datetime.now(BRUSSELS).strftime("%Y-%m-%d")
 
-
 def send_message(text):
     requests.post(f"{BASE_URL}/sendMessage", json={
         "chat_id": CHAT_ID, "text": text, "parse_mode": "Markdown"
     }, timeout=10)
 
-
 def get_updates():
     resp = requests.get(f"{BASE_URL}/getUpdates?limit=50&timeout=0", timeout=15)
     return resp.json().get("result", [])
-
 
 def extract_weight(text):
     """Zoekt een getal tussen 30 en 200 in de tekst (gewicht in kg)."""
@@ -40,7 +37,6 @@ def extract_weight(text):
         except ValueError:
             pass
     return None
-
 
 def calculate_streak(data_type: str) -> int:
     """Berekent de huidige aaneengesloten streak van gelogde dagen."""
@@ -66,7 +62,6 @@ def calculate_streak(data_type: str) -> int:
         check_date -= datetime.timedelta(days=1)
     return streak
 
-
 def streak_tekst(streak: int) -> str:
     if streak < 2:
         return ""
@@ -80,14 +75,12 @@ def streak_tekst(streak: int) -> str:
         emoji = "⚡"
     return f"{emoji} *{streak} dagen op rij gewicht gelogd!*"
 
-
 def save_weight(datum, gewicht):
     payload = {"type": "gewicht", "datum": datum, "gewicht": gewicht}
     resp = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15, allow_redirects=False)
     if resp.status_code in (301, 302, 303, 307, 308):
         resp = requests.get(resp.headers.get("Location", ""), timeout=15)
     return resp.ok
-
 
 def main():
     today = today_str()
@@ -126,7 +119,6 @@ def main():
         send_message(msg)
     else:
         send_message(f"⚖️ Gewicht ontvangen ({gewicht} kg) maar opslaan mislukte.")
-
 
 if __name__ == "__main__":
     main()

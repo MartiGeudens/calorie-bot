@@ -5,31 +5,25 @@ import subprocess
 import requests
 from groq import Groq
 
-# ── Config ────────────────────────────────────────────────────────────────────
 BOT_TOKEN    = os.environ["BOT_TOKEN"]
 CHAT_ID      = int(os.environ["CHAT_ID"])
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 
 BASE_URL          = f"https://api.telegram.org/bot{BOT_TOKEN}"
-RECIPES_FILE      = "recepten.json"
-LAST_UPDATE_FILE  = "last_recept_update.txt"
+RECIPES_FILE      = "data/config/recepten.json"
+LAST_UPDATE_FILE  = "data/state/last_recept_update.txt"
 
 groq_client = Groq(api_key=GROQ_API_KEY)
 
-
-# ── Telegram ──────────────────────────────────────────────────────────────────
 def send_message(text):
     requests.post(f"{BASE_URL}/sendMessage", json={
         "chat_id": CHAT_ID, "text": text, "parse_mode": "Markdown"
     }, timeout=10)
 
-
 def get_updates():
     resp = requests.get(f"{BASE_URL}/getUpdates?limit=50&timeout=0", timeout=15)
     return resp.json().get("result", [])
 
-
-# ── Recepten opslaan ──────────────────────────────────────────────────────────
 def load_recipes():
     try:
         with open(RECIPES_FILE, encoding="utf-8") as f:
@@ -37,14 +31,12 @@ def load_recipes():
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
-
 def get_last_update_id():
     try:
         with open(LAST_UPDATE_FILE) as f:
             return int(f.read().strip())
     except Exception:
         return 0
-
 
 def commit_files():
     subprocess.run(["git", "config", "user.email", "action@github.com"])
@@ -55,8 +47,6 @@ def commit_files():
         subprocess.run(["git", "commit", "-m", "Recepten bijgewerkt"])
         subprocess.run(["git", "push"])
 
-
-# ── Bericht parsen ────────────────────────────────────────────────────────────
 def parse_recipe_message(text):
     """
     Ondersteunde formaten:
@@ -72,12 +62,10 @@ def parse_recipe_message(text):
         mode = 'manual'
         rest = re.sub(r'^(/recept|recept)\s*:?\s*', '', text, flags=re.IGNORECASE).strip()
 
-    # Splits op | voor handmatige macro's (enkel relevant bij /recept)
     parts = rest.split('|', 1)
     ingredienten_deel = parts[0].strip()
     manual_macros_str = parts[1].strip() if len(parts) > 1 else None
 
-    # Naam staat voor de eerste dubbele punt
     if ':' in ingredienten_deel:
         naam_hint, ingr_str = ingredienten_deel.split(':', 1)
         naam_hint = naam_hint.strip()
@@ -87,7 +75,6 @@ def parse_recipe_message(text):
         ingr_str  = ingredienten_deel
 
     return mode, naam_hint, ingr_str, manual_macros_str
-
 
 def parse_manual_macros(text):
     """Parseert '450 kcal, 25g eiwit, 55g koolh, 12g vet, 6g vezel'"""
@@ -105,13 +92,10 @@ def parse_manual_macros(text):
             data[key] = int(m.group(1))
     return data
 
-
-# ── Recept verwerken ──────────────────────────────────────────────────────────
 def process_recipe_command(text):
     mode, naam_hint, ingr_str, manual_macros_str = parse_recipe_message(text)
 
     if mode == 'manual' and manual_macros_str:
-        # ── Manuele macro's: AI structureert enkel de ingrediënten ──
         manual = parse_manual_macros(manual_macros_str)
 
         prompt = f"""Structureer dit recept. Geef GEEN voedingswaarden — die worden manueel opgegeven.
@@ -157,7 +141,6 @@ Antwoord UITSLUITEND met geldige JSON:
         return None, None
 
     else:
-        # ── AI berekent alles (/recept_ai) ──
         prompt = f"""Analyseer dit recept. Structureer de ingrediënten EN bereken voedingswaarden PER PORTIE.
 Gebruik Belgische portiegroottes. Wees realistisch.
 
@@ -183,13 +166,10 @@ Antwoord UITSLUITEND met geldige JSON:
         data["macros_bron"] = "ai"
         return naam, data
 
-
-# ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     last_id = get_last_update_id()
     updates = get_updates()
 
-    # Alleen NIEUWE berichten verwerken (update_id > laatste verwerkte)
     new_updates = [u for u in updates if u["update_id"] > last_id]
 
     recipe_entries = [
@@ -243,7 +223,6 @@ def main():
         commit_files()
     except Exception as e:
         print(f"Opslaan mislukt: {e}")
-
 
 if __name__ == "__main__":
     main()

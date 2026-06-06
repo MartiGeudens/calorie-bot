@@ -22,7 +22,7 @@ jobs:
         run: pip install requests groq pytz
 
       - name: Verwerk /tips commando
-        run: python tips.py
+        run: python scripts/tips.py
         env:
           BOT_TOKEN:    ${{ secrets.BOT_TOKEN }}
           CHAT_ID:      ${{ secrets.CHAT_ID }}
