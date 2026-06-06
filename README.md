@@ -60,6 +60,15 @@ Macrodoelen worden centraal beheerd in `config.json`. Pas dit bestand aan en pus
 | Elke 10 min | /tips check |
 | Elke 30 min | Recepten check |
 
+## Setup
+
+Zie de `docs/` map voor stapsgewijze instructies per onderdeel:
+
+- [Telegram bot](docs/telegram-bot.md) — bot aanmaken, BOT_TOKEN en CHAT_ID ophalen
+- [Groq AI](docs/groq-ai.md) — account en API key
+- [Google Sheets](docs/google-sheets.md) — spreadsheet layout, Apps Script, web app deployment
+- [cron-job.org](docs/cronjob.md) — GitHub PAT, job URLs en tijdsinstellingen
+
 ## Tech stack
 
 | Component | Dienst |
