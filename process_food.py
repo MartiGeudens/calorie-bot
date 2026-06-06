@@ -17,12 +17,16 @@ BASE_URL          = f"https://api.telegram.org/bot{BOT_TOKEN}"
 RECIPES_FILE      = "recepten.json"
 LAST_UPDATE_FILE  = "last_food_update.txt"
 
-# Dagelijkse macrodoelen
-DOEL_KCAL  = 2750
-DOEL_EIWIT = 150
-DOEL_KOOLH = 320
-DOEL_VET   = 85
-DOEL_VEZEL = 30
+def load_config() -> dict:
+    with open("config.json", encoding="utf-8") as f:
+        return json.load(f)["doelen"]
+
+_cfg       = load_config()
+DOEL_KCAL  = _cfg["kcal"]
+DOEL_EIWIT = _cfg["eiwitten"]
+DOEL_KOOLH = _cfg["koolhydraten"]
+DOEL_VET   = _cfg["vetten"]
+DOEL_VEZEL = _cfg["vezels"]
 
 groq_client = Groq(api_key=GROQ_API_KEY)
 
