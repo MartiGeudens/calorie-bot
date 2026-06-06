@@ -52,13 +52,13 @@ Macrodoelen worden centraal beheerd in `config.json`. Pas dit bestand aan en pus
 
 | Tijdstip | Actie |
 |---|---|
-| 09:00 | Gewichtsvraag |
+| 07:00 | Gewichtsvraag |
 | 15:00 | Gewicht opslaan |
 | 21:00 | Herinnering maaltijden |
 | 00:00 | AI-analyse en opslag |
 | Maandag 08:00 | Wekelijks rapport |
 | Elke 10 min | /tips check |
-| Elke 2u | Recepten check |
+| Elke 30 min | Recepten check |
 
 ## Tech stack
 
