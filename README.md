@@ -32,15 +32,21 @@ Elke maandag om 08:00: gemiddelden per macro, vergelijking met de persoonlijke d
 ### Recepten
 Voeg recepten toe via `/recept_ai` (AI berekent macro's) of `/recept` (eigen macro's opgeven). Recepten worden automatisch herkend in maaltijdlogs voor exacte berekeningen in plaats van AI-schattingen. Beschikbaar via het receptenboek op GitHub Pages.
 
-## Dagelijkse macrodoelen
+## Configuratie
 
-| Macro | Doel |
-|---|---|
-| Calorieen | 2750 kcal |
-| Eiwitten | 150g |
-| Koolhydraten | 320g |
-| Vetten | 85g |
-| Vezels | 30g |
+Macrodoelen worden centraal beheerd in `config.json`. Pas dit bestand aan en push — alle workflows pikken de nieuwe waarden automatisch op.
+
+```json
+{
+  "doelen": {
+    "kcal": 2750,
+    "eiwitten": 150,
+    "koolhydraten": 320,
+    "vetten": 85,
+    "vezels": 30
+  }
+}
+```
 
 ## Dagelijkse flow
 
