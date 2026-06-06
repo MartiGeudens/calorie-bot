@@ -69,28 +69,35 @@
 
     .search-bar input::placeholder { color: rgba(255,255,255,0.5); }
 
-    /* ── Stats bar ── */
-    .stats-bar {
+    /* ── Toolbar ── */
+    .toolbar {
       display: flex;
-      gap: 8px;
-      padding: 12px 16px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
       background: var(--card);
       border-bottom: 1px solid var(--border);
-      overflow-x: auto;
-      scrollbar-width: none;
+      gap: 12px;
     }
-    .stats-bar::-webkit-scrollbar { display: none; }
 
-    .stat-chip {
-      flex-shrink: 0;
-      background: var(--pill-bg);
-      border-radius: 20px;
-      padding: 5px 12px;
-      font-size: 0.8rem;
+    .recipe-count {
+      font-size: 0.85rem;
       color: var(--subtext);
       white-space: nowrap;
     }
-    .stat-chip strong { color: var(--text); }
+    .recipe-count strong { color: var(--text); }
+
+    .sort-select {
+      background: var(--pill-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-size: 0.82rem;
+      color: var(--text);
+      cursor: pointer;
+      outline: none;
+      font-family: inherit;
+    }
 
     /* ── Grid ── */
     .grid {
@@ -282,8 +289,14 @@
   </div>
 </header>
 
-<div class="stats-bar" id="statsBar">
-  <div class="stat-chip">Laden…</div>
+<div class="toolbar">
+  <span class="recipe-count" id="recipeCount">Laden…</span>
+  <select class="sort-select" id="sortSelect" onchange="sortCards()">
+    <option value="naam">A–Z</option>
+    <option value="eiwitten">Meeste eiwitten</option>
+    <option value="calories">Meeste kcal</option>
+    <option value="calories_asc">Minste kcal</option>
+  </select>
 </div>
 
 <main>
@@ -373,11 +386,31 @@
     btn.nextElementSibling.classList.toggle('open');
   }
 
+  let allRecepten = {};
+
+  function sortCards() {
+    const sortBy = document.getElementById('sortSelect').value;
+    const grid = document.getElementById('grid');
+    const cards = [...grid.querySelectorAll('.card')];
+
+    cards.sort((a, b) => {
+      const na = a.dataset.naam, nb = b.dataset.naam;
+      const da = allRecepten[na] || {}, db = allRecepten[nb] || {};
+      if (sortBy === 'naam')         return na.localeCompare(nb);
+      if (sortBy === 'eiwitten')     return (db.eiwitten || 0) - (da.eiwitten || 0);
+      if (sortBy === 'calories')     return (db.calories || 0) - (da.calories || 0);
+      if (sortBy === 'calories_asc') return (da.calories || 0) - (db.calories || 0);
+      return 0;
+    });
+
+    cards.forEach(c => grid.appendChild(c));
+  }
+
   async function load() {
     try {
       const resp = await fetch('recepten.json?v=' + Date.now());
-      const recepten = await resp.json();
-      const namen = Object.keys(recepten);
+      allRecepten = await resp.json();
+      const namen = Object.keys(allRecepten);
 
       document.getElementById('loadingMsg').style.display = 'none';
 
@@ -386,23 +419,15 @@
         document.getElementById('loadingMsg').innerHTML = `
           <div class="icon">📭</div>
           <p>Nog geen recepten opgeslagen.<br>Stuur <strong>/recept naam: ingrediënten</strong> naar je bot!</p>`;
-        document.getElementById('statsBar').innerHTML = '<div class="stat-chip">0 recepten</div>';
+        document.getElementById('recipeCount').innerHTML = '<strong>0</strong> recepten';
         return;
       }
 
-      // Stats
-      const vals = Object.values(recepten);
-      const avg  = k => Math.round(vals.reduce((s,v) => s + (v[k]||0), 0) / vals.length);
-      document.getElementById('statsBar').innerHTML = `
-        <div class="stat-chip"><strong>${namen.length}</strong> recepten</div>
-        <div class="stat-chip">Gem. <strong>${avg('calories')} kcal</strong></div>
-        <div class="stat-chip">Gem. <strong>${avg('eiwitten')}g</strong> eiwit</div>
-        <div class="stat-chip">Gem. <strong>${avg('koolhydraten')}g</strong> koolh</div>
-        <div class="stat-chip">Gem. <strong>${avg('vetten')}g</strong> vet</div>`;
+      document.getElementById('recipeCount').innerHTML = `<strong>${namen.length}</strong> recepten`;
 
       // Cards
       const grid = document.getElementById('grid');
-      namen.sort().forEach(naam => grid.appendChild(renderCard(naam, recepten[naam])));
+      namen.sort().forEach(naam => grid.appendChild(renderCard(naam, allRecepten[naam])));
 
       document.getElementById('footer').textContent =
         `Laatste update: ${new Date().toLocaleDateString('nl-BE', {day:'numeric',month:'long',year:'numeric'})}`;
