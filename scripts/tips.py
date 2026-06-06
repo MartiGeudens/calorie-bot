@@ -188,8 +188,8 @@ def main() -> None:
     if not food_messages:
         send_message(
             "📊 *Calorie Tips*\n\n"
-            "Je hebt nog niets gelogd voor vandaag\\.\n\n"
-            "Stuur je maaltijden als gewone berichten en gebruik daarna /tips om je caloriëbudget te bekijken\\."
+            "Je hebt nog niets gelogd voor vandaag.\n\n"
+            "Stuur je maaltijden als gewone berichten en gebruik daarna /tips om je caloriëbudget te bekijken."
         )
         save_last_tips_id(max_tips_id)
         commit_tips_file()
