@@ -119,5 +119,21 @@
     "vetten": 28,
     "vezels": 0,
     "macros_bron": "manueel"
+  },
+  "lasagne_mama": {
+    "portie": "1 bord ~350g",
+    "ingredienten": [
+      "pastaplaten",
+      "rundergehakt",
+      "tomatensaus",
+      "bechamelsaus",
+      "geraspte kaas"
+    ],
+    "calories": 720,
+    "eiwitten": 38,
+    "koolhydraten": 62,
+    "vetten": 32,
+    "vezels": 0,
+    "macros_bron": "manueel"
   }
 }
