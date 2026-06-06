@@ -3,24 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#1a1a2e" />
+  <meta name="theme-color" content="#111111" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>🍽️ Mijn Receptenboek</title>
+  <title>Receptenboek</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:        #f7f3ee;
-      --card:      #ffffff;
-      --text:      #1a1a1a;
-      --subtext:   #6b6b6b;
-      --accent:    #e07b39;
-      --border:    #e8e0d8;
-      --pill-bg:   #f0ebe4;
-      --shadow:    0 2px 12px rgba(0,0,0,0.08);
-      --header-bg: #1a1a2e;
-      --ingr-bg:   #f8f5f1;
+      --bg:       #f5f5f5;
+      --card:     #ffffff;
+      --text:     #111111;
+      --subtext:  #888888;
+      --accent:   #111111;
+      --border:   #e5e5e5;
+      --shadow:   0 1px 4px rgba(0,0,0,0.06);
     }
 
     body {
@@ -30,32 +27,28 @@
       min-height: 100vh;
     }
 
-    /* ── Header ── */
+    /* Header */
     header {
-      background: var(--header-bg);
+      background: #111;
       color: #fff;
-      padding: 20px 16px 16px;
+      padding: 18px 16px 14px;
       position: sticky;
       top: 0;
       z-index: 100;
     }
 
     header h1 {
-      font-size: 1.4rem;
-      font-weight: 700;
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: 0.3px;
       margin-bottom: 12px;
     }
 
-    header h1 span { color: var(--accent); }
-
     .search-bar {
-      display: flex;
-      align-items: center;
       background: rgba(255,255,255,0.1);
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 12px;
-      padding: 8px 14px;
-      gap: 8px;
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 8px;
+      padding: 8px 12px;
     }
 
     .search-bar input {
@@ -63,13 +56,13 @@
       border: none;
       outline: none;
       color: #fff;
-      font-size: 0.95rem;
+      font-size: 0.9rem;
       width: 100%;
     }
 
-    .search-bar input::placeholder { color: rgba(255,255,255,0.5); }
+    .search-bar input::placeholder { color: rgba(255,255,255,0.4); }
 
-    /* ── Toolbar ── */
+    /* Toolbar */
     .toolbar {
       display: flex;
       align-items: center;
@@ -77,98 +70,73 @@
       padding: 10px 16px;
       background: var(--card);
       border-bottom: 1px solid var(--border);
-      gap: 12px;
     }
 
     .recipe-count {
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       color: var(--subtext);
-      white-space: nowrap;
     }
     .recipe-count strong { color: var(--text); }
 
     .sort-select {
-      background: var(--pill-bg);
+      background: var(--bg);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 5px 10px;
-      font-size: 0.82rem;
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 0.8rem;
       color: var(--text);
       cursor: pointer;
       outline: none;
       font-family: inherit;
     }
 
-    /* ── Grid ── */
+    /* Grid */
     .grid {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 12px;
+      gap: 1px;
+      background: var(--border);
+    }
+
+    @media (min-width: 600px) { .grid { grid-template-columns: 1fr 1fr; } }
+    @media (min-width: 900px) { .grid { grid-template-columns: 1fr 1fr 1fr; } }
+
+    /* Card */
+    .card {
+      background: var(--card);
       padding: 16px;
     }
 
-    @media (min-width: 600px)  { .grid { grid-template-columns: 1fr 1fr; } }
-    @media (min-width: 900px)  { .grid { grid-template-columns: 1fr 1fr 1fr; } }
-
-    /* ── Card ── */
-    .card {
-      background: var(--card);
-      border-radius: 16px;
-      box-shadow: var(--shadow);
-      overflow: hidden;
-      border: 1px solid var(--border);
-    }
-
-    .card-header {
-      background: linear-gradient(135deg, #e07b39, #c0622a);
-      padding: 18px 16px 14px;
-    }
-
-    .card-emoji { font-size: 2rem; margin-bottom: 6px; }
-
     .card-title {
-      font-size: 1.05rem;
-      font-weight: 700;
-      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
       text-transform: capitalize;
-      line-height: 1.3;
+      margin-bottom: 2px;
     }
 
-    .card-meta {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 4px;
-      flex-wrap: wrap;
+    .card-portie {
+      font-size: 0.78rem;
+      color: var(--subtext);
+      margin-bottom: 12px;
     }
-
-    .card-portie { font-size: 0.78rem; color: rgba(255,255,255,0.75); }
-
-    .bron-badge {
-      font-size: 0.7rem;
-      background: rgba(255,255,255,0.2);
-      color: #fff;
-      border-radius: 20px;
-      padding: 2px 8px;
-    }
-
-    .card-body { padding: 14px 16px 0; }
 
     .kcal-row {
       display: flex;
       align-items: baseline;
       gap: 4px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
 
     .kcal-num {
-      font-size: 1.8rem;
-      font-weight: 800;
-      color: var(--accent);
+      font-size: 1.6rem;
+      font-weight: 700;
       line-height: 1;
     }
 
-    .kcal-label { font-size: 0.8rem; color: var(--subtext); }
+    .kcal-label {
+      font-size: 0.75rem;
+      color: var(--subtext);
+    }
 
     .macros {
       display: grid;
@@ -178,103 +146,90 @@
     }
 
     .macro {
-      background: var(--pill-bg);
-      border-radius: 10px;
-      padding: 7px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 8px;
     }
 
     .macro-label {
-      font-size: 0.7rem;
+      font-size: 0.68rem;
       color: var(--subtext);
       text-transform: uppercase;
-      letter-spacing: 0.4px;
-      margin-bottom: 2px;
+      letter-spacing: 0.3px;
+      margin-bottom: 1px;
     }
 
-    .macro-val { font-size: 0.95rem; font-weight: 700; }
+    .macro-val {
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
 
-    .macro.eiwit  { border-left: 3px solid #3a7d44; }
-    .macro.eiwit  .macro-val { color: #3a7d44; }
-    .macro.koolh  { border-left: 3px solid #e0963a; }
-    .macro.koolh  .macro-val { color: #c07a20; }
-    .macro.vet    { border-left: 3px solid #e04a3a; }
-    .macro.vet    .macro-val { color: #c0302a; }
-    .macro.vezel  { border-left: 3px solid #3a5fa8; }
-    .macro.vezel  .macro-val { color: #3a5fa8; }
+    .bron-badge {
+      display: inline-block;
+      font-size: 0.68rem;
+      color: var(--subtext);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      margin-bottom: 10px;
+    }
 
-    /* ── Ingrediënten toggle ── */
+    /* Ingredienten toggle */
     .ingr-toggle {
       width: 100%;
-      background: var(--ingr-bg);
+      background: none;
       border: none;
       border-top: 1px solid var(--border);
-      padding: 11px 16px;
+      padding: 10px 0 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
       cursor: pointer;
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--text);
+      font-size: 0.8rem;
+      color: var(--subtext);
       font-family: inherit;
     }
 
-    .ingr-toggle:hover { background: #f0ebe3; }
+    .ingr-toggle:hover { color: var(--text); }
 
     .ingr-toggle .arrow {
       transition: transform 0.2s;
-      font-size: 0.75rem;
-      color: var(--subtext);
+      font-size: 0.65rem;
     }
 
     .ingr-toggle.open .arrow { transform: rotate(180deg); }
 
     .ingr-list {
       display: none;
-      background: var(--ingr-bg);
-      padding: 4px 16px 14px;
-      border-top: 1px dashed var(--border);
+      padding-top: 8px;
     }
 
     .ingr-list.open { display: block; }
 
     .ingr-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 7px 0;
+      padding: 5px 0;
       border-bottom: 1px solid var(--border);
-      font-size: 0.88rem;
+      font-size: 0.82rem;
+      color: var(--subtext);
     }
 
     .ingr-item:last-child { border-bottom: none; }
 
-    .ingr-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--accent);
-      flex-shrink: 0;
-    }
-
-    .ingr-text { color: var(--text); line-height: 1.4; }
-
-    /* ── Lege/laad states ── */
+    /* States */
     .center-msg {
       text-align: center;
       padding: 60px 20px;
       color: var(--subtext);
+      font-size: 0.9rem;
+      line-height: 1.6;
     }
-
-    .center-msg .icon { font-size: 3rem; margin-bottom: 12px; }
-    .center-msg p { font-size: 1rem; line-height: 1.6; }
 
     .no-results { display: none; }
 
     footer {
       text-align: center;
-      padding: 24px 16px;
-      font-size: 0.78rem;
+      padding: 20px 16px;
+      font-size: 0.75rem;
       color: var(--subtext);
     }
   </style>
@@ -282,10 +237,9 @@
 <body>
 
 <header>
-  <h1>🍽️ Mijn <span>Receptenboek</span></h1>
+  <h1>Receptenboek</h1>
   <div class="search-bar">
-    <span>🔍</span>
-    <input type="text" id="search" placeholder="Zoek een recept…" autocomplete="off" />
+    <input type="text" id="search" placeholder="Zoek recept…" autocomplete="off" />
   </div>
 </header>
 
@@ -301,79 +255,56 @@
 
 <main>
   <div class="grid" id="grid"></div>
-  <div class="center-msg no-results" id="noResults">
-    <div class="icon">🤷</div>
-    <p>Geen recepten gevonden.</p>
-  </div>
-  <div class="center-msg" id="loadingMsg">
-    <div class="icon">⏳</div>
-    <p>Recepten laden…</p>
-  </div>
+  <div class="center-msg no-results" id="noResults">Geen recepten gevonden.</div>
+  <div class="center-msg" id="loadingMsg">Recepten laden…</div>
 </main>
 
 <footer id="footer"></footer>
 
 <script>
-  const EMOJIS = ["🍝","🥗","🍳","🥩","🍜","🥘","🫕","🍲","🥙","🌮","🍱","🥣","🧆","🫔","🍛","🥞","🍖","🫙","🥚","🧇"];
-
-  function emoji(naam) {
-    return EMOJIS[naam.split('').reduce((a,c) => a + c.charCodeAt(0), 0) % EMOJIS.length];
-  }
-
   function fmtNaam(naam) {
     return naam.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
   }
 
   function renderCard(naam, data) {
     const ingr = data.ingredienten || [];
-    const bron = data.macros_bron === 'manueel' ? '✍️ Manueel' : '🤖 AI';
+    const bron = data.macros_bron === 'manueel' ? 'Manueel' : 'AI';
 
     const ingrHtml = ingr.length
-      ? ingr.map(i => `
-          <div class="ingr-item">
-            <div class="ingr-dot"></div>
-            <div class="ingr-text">${i}</div>
-          </div>`).join('')
-      : '<div class="ingr-item"><div class="ingr-text" style="color:var(--subtext)">Geen ingrediënten opgeslagen</div></div>';
+      ? ingr.map(i => `<div class="ingr-item">${i}</div>`).join('')
+      : '<div class="ingr-item">Geen ingrediënten opgeslagen</div>';
 
     const card = document.createElement('div');
     card.className = 'card';
     card.dataset.naam = naam.toLowerCase();
     card.innerHTML = `
-      <div class="card-header">
-        <div class="card-emoji">${emoji(naam)}</div>
-        <div class="card-title">${fmtNaam(naam)}</div>
-        <div class="card-meta">
-          <span class="card-portie">📏 ${data.portie || '1 portie'}</span>
-          <span class="bron-badge">${bron}</span>
+      <div class="card-title">${fmtNaam(naam)}</div>
+      <div class="card-portie">${data.portie || '1 portie'}</div>
+      <div class="kcal-row">
+        <span class="kcal-num">${data.calories}</span>
+        <span class="kcal-label">kcal</span>
+      </div>
+      <div class="macros">
+        <div class="macro">
+          <div class="macro-label">Eiwitten</div>
+          <div class="macro-val">${data.eiwitten}g</div>
+        </div>
+        <div class="macro">
+          <div class="macro-label">Koolhydraten</div>
+          <div class="macro-val">${data.koolhydraten}g</div>
+        </div>
+        <div class="macro">
+          <div class="macro-label">Vetten</div>
+          <div class="macro-val">${data.vetten}g</div>
+        </div>
+        <div class="macro">
+          <div class="macro-label">Vezels</div>
+          <div class="macro-val">${data.vezels}g</div>
         </div>
       </div>
-      <div class="card-body">
-        <div class="kcal-row">
-          <span class="kcal-num">${data.calories}</span>
-          <span class="kcal-label">kcal per portie</span>
-        </div>
-        <div class="macros">
-          <div class="macro eiwit">
-            <div class="macro-label">Eiwitten</div>
-            <div class="macro-val">${data.eiwitten} g</div>
-          </div>
-          <div class="macro koolh">
-            <div class="macro-label">Koolhydraten</div>
-            <div class="macro-val">${data.koolhydraten} g</div>
-          </div>
-          <div class="macro vet">
-            <div class="macro-label">Vetten</div>
-            <div class="macro-val">${data.vetten} g</div>
-          </div>
-          <div class="macro vezel">
-            <div class="macro-label">Vezels</div>
-            <div class="macro-val">${data.vezels} g</div>
-          </div>
-        </div>
-      </div>
+      <span class="bron-badge">${bron}</span>
       <button class="ingr-toggle" onclick="toggleIngr(this)">
-        <span>🛒 Ingrediënten (${ingr.length})</span>
+        <span>Ingrediënten (${ingr.length})</span>
         <span class="arrow">▼</span>
       </button>
       <div class="ingr-list">${ingrHtml}</div>`;
@@ -416,29 +347,24 @@
 
       if (namen.length === 0) {
         document.getElementById('loadingMsg').style.display = 'block';
-        document.getElementById('loadingMsg').innerHTML = `
-          <div class="icon">📭</div>
-          <p>Nog geen recepten opgeslagen.<br>Stuur <strong>/recept naam: ingrediënten</strong> naar je bot!</p>`;
+        document.getElementById('loadingMsg').textContent = 'Nog geen recepten opgeslagen.';
         document.getElementById('recipeCount').innerHTML = '<strong>0</strong> recepten';
         return;
       }
 
       document.getElementById('recipeCount').innerHTML = `<strong>${namen.length}</strong> recepten`;
 
-      // Cards
       const grid = document.getElementById('grid');
       namen.sort().forEach(naam => grid.appendChild(renderCard(naam, allRecepten[naam])));
 
       document.getElementById('footer').textContent =
-        `Laatste update: ${new Date().toLocaleDateString('nl-BE', {day:'numeric',month:'long',year:'numeric'})}`;
+        new Date().toLocaleDateString('nl-BE', {day:'numeric', month:'long', year:'numeric'});
 
-      // Search
       document.getElementById('search').addEventListener('input', e => {
         const q = e.target.value.toLowerCase();
         let found = 0;
         document.querySelectorAll('.card').forEach(card => {
-          const naam = card.dataset.naam;
-          const match = naam.includes(q) || naam.replace(/_/g,' ').includes(q);
+          const match = card.dataset.naam.includes(q) || card.dataset.naam.replace(/_/g,' ').includes(q);
           card.style.display = match ? '' : 'none';
           if (match) found++;
         });
@@ -446,9 +372,7 @@
       });
 
     } catch(err) {
-      document.getElementById('loadingMsg').innerHTML = `
-        <div class="icon">❌</div>
-        <p>Kon recepten niet laden.<br><small>${err.message}</small></p>`;
+      document.getElementById('loadingMsg').textContent = 'Kon recepten niet laden.';
     }
   }
 
