@@ -116,5 +116,19 @@
     "vetten": 32,
     "vezels": 0,
     "macros_bron": "manueel"
+  },
+  "vanillepudding_200g": {
+    "portie": "1 kom ~200g",
+    "ingredienten": [
+      "100g poeder Imperial vanillepudding",
+      "150g kristalsuiker",
+      "1500g volle melk"
+    ],
+    "calories": 220,
+    "eiwitten": 6,
+    "koolhydraten": 35,
+    "vetten": 6,
+    "vezels": 0,
+    "macros_bron": "manueel"
   }
 }
