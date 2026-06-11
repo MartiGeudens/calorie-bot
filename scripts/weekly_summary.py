@@ -32,7 +32,10 @@ def send_message(text: str) -> None:
         "chat_id": CHAT_ID, "text": text, "parse_mode": "Markdown",
     }, timeout=10)
 
+UNAUTHORIZED = False  # wordt True als doGet de key weigert
+
 def fetch_data(data_type: str, limit: int) -> list:
+    global UNAUTHORIZED
     url = APPS_SCRIPT_URL
     params = {"type": data_type, "limit": limit, "key": APPS_SCRIPT_KEY}
     print(f"[DEBUG] GET {url} params={params}")
@@ -52,6 +55,9 @@ def fetch_data(data_type: str, limit: int) -> list:
     try:
         result = resp.json()
         print(f"[DEBUG] JSON geparsed, type={type(result).__name__}, lengte={len(result) if isinstance(result, list) else 'n.v.t.'}")
+        if isinstance(result, dict) and result.get("error") == "unauthorized":
+            UNAUTHORIZED = True
+            print("[DEBUG] doGet weigerde de key (unauthorized)")
         return result if isinstance(result, list) else []
     except Exception as e:
         print(f"[DEBUG] JSON parse mislukt: {e}")
@@ -106,11 +112,37 @@ def moving_avg(wbd: dict, end: datetime.date, window: int = 7):
     return round(sum(vals) / len(vals), 2) if len(vals) >= 3 else None
 
 def tdee_blok(maaltijden: list, wbd: dict, today: datetime.date) -> str:
-    """Schat de werkelijke TDEE over 14 dagen: gem. intake − (Δkg_gesmoothed × 7700 / 14).
-    Alleen tonen als er genoeg data is, anders een eerlijke 'nog niet genoeg data'-melding."""
-    window  = 14
-    start_d = today - datetime.timedelta(days=window)
+    """Schat de werkelijke TDEE: gem. intake − (Δkg_gesmoothed × 7700 / dagen).
+    Adaptief: pakt het vroegst beschikbare gesmoothde startpunt tussen 14 en 10
+    dagen terug, zodat de schatting ook werkt als de gewichtshistoriek nog jong is."""
+    ma_end = moving_avg(wbd, today)
 
+    # vroegst mogelijke anker met een geldig 7d-gemiddelde (langste span eerst)
+    span = ma_start = None
+    for terug in range(14, 9, -1):
+        m = moving_avg(wbd, today - datetime.timedelta(days=terug))
+        if m is not None:
+            span, ma_start = terug, m
+            break
+
+    if ma_end is None or span is None:
+        # vertel concreet wanneer de eerste schatting mogelijk wordt
+        if wbd:
+            d, eerste_ma = min(wbd), None
+            while d <= today:
+                if moving_avg(wbd, d) is not None:
+                    eerste_ma = d
+                    break
+                d += datetime.timedelta(days=1)
+            if eerste_ma:
+                vanaf = eerste_ma + datetime.timedelta(days=10)
+                return (
+                    f"\n🔬 *TDEE-schatting:* gewichtshistoriek nog te kort — "
+                    f"eerste schatting mogelijk rond {vanaf.strftime('%d/%m')}\n"
+                )
+        return "\n🔬 *TDEE-schatting:* nog te weinig wegingen (min. 3 per week)\n"
+
+    start_d = today - datetime.timedelta(days=span)
     kcals = []
     for r in maaltijden:
         if not isinstance(r, dict):
@@ -120,19 +152,16 @@ def tdee_blok(maaltijden: list, wbd: dict, today: datetime.date) -> str:
         if d and c > 0 and start_d < d <= today:
             kcals.append(c)
 
-    weigh_count = sum(1 for d in wbd if start_d <= d <= today)
-    ma_end   = moving_avg(wbd, today)
-    ma_start = moving_avg(wbd, start_d)
-
-    if len(kcals) < 10 or weigh_count < 8 or ma_end is None or ma_start is None:
+    min_logged = max(7, round(span * 0.7))
+    if len(kcals) < min_logged:
         return (
-            f"\n🔬 *TDEE-schatting:* nog onvoldoende data "
-            f"({len(kcals)}/10 dagen gelogd, {weigh_count}/8 wegingen in 14 dagen)\n"
+            f"\n🔬 *TDEE-schatting:* te weinig gelogde dagen in de meetperiode "
+            f"({len(kcals)}/{min_logged})\n"
         )
 
     avg_intake = sum(kcals) / len(kcals)
     delta_kg   = ma_end - ma_start
-    tdee       = avg_intake - (delta_kg * 7700 / window)
+    tdee       = avg_intake - (delta_kg * 7700 / span)
     tdee_r     = round(tdee / 50) * 50
 
     if not 1500 <= tdee_r <= 4500:
@@ -141,7 +170,7 @@ def tdee_blok(maaltijden: list, wbd: dict, today: datetime.date) -> str:
     proj = (DOEL_KCAL - tdee) * 7 / 7700  # kg/week bij doelintake
     sign = "+" if proj > 0 else ""
     return (
-        f"\n🔬 *Geschatte TDEE:* ~{tdee_r} kcal/dag\n"
+        f"\n🔬 *Geschatte TDEE:* ~{tdee_r} kcal/dag (o.b.v. {span} dagen)\n"
         f"  Aan je doel van {DOEL_KCAL} kcal ≈ {sign}{round(proj, 2)} kg/week\n"
     )
 
@@ -162,7 +191,16 @@ def main() -> None:
     gewichten  = fetch_data("gewicht", 25)
 
     if not maaltijden:
-        send_message("📊 Kon geen maaltijddata ophalen voor het wekelijks overzicht.")
+        if UNAUTHORIZED:
+            send_message(
+                "⚠️ doGet weigerde de API-key.\n\n"
+                "Check of deze 3 exact dezelfde waarde hebben:\n"
+                "1. GitHub secret `APPS_SCRIPT_KEY`\n"
+                "2. Apps Script property `API_KEY`\n"
+                "3. En of er een *nieuwe versie* gedeployed is"
+            )
+        else:
+            send_message("📊 Kon geen maaltijddata ophalen voor het wekelijks overzicht.")
         return
 
     this_week = maaltijden[-7:] if len(maaltijden) >= 7 else maaltijden

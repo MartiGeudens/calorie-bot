@@ -52,7 +52,10 @@ def send_photo(png_bytes: bytes, caption: str) -> bool:
         print(f"sendPhoto fout: {resp.status_code} — {resp.text}")
     return resp.ok
 
+UNAUTHORIZED = False  # wordt True als doGet de key weigert
+
 def fetch_data(data_type: str, limit: int) -> list:
+    global UNAUTHORIZED
     try:
         resp = requests.get(
             APPS_SCRIPT_URL,
@@ -63,6 +66,9 @@ def fetch_data(data_type: str, limit: int) -> list:
         if resp.status_code in (301, 302, 303, 307, 308):
             resp = requests.get(resp.headers.get("Location", ""), timeout=15)
         rows = resp.json()
+        if isinstance(rows, dict) and rows.get("error") == "unauthorized":
+            UNAUTHORIZED = True
+            print(f"doGet weigerde de key (unauthorized) voor type={data_type}")
         return rows if isinstance(rows, list) else []
     except Exception as e:
         print(f"Data ophalen mislukt ({data_type}): {e}")
@@ -87,6 +93,19 @@ def moving_avg(wbd: dict, end: datetime.date, window: int = 7):
         if (end - datetime.timedelta(days=i)) in wbd
     ]
     return round(sum(vals) / len(vals), 2) if len(vals) >= 3 else None
+
+def ma_ankers(wbd: dict, eerste: datetime.date, laatste: datetime.date):
+    """Eerste en laatste datum in de periode met een geldig 7d-gemiddelde.
+    Adaptief: zo werkt de trend ook als de weeghistoriek pas midden in de maand begint."""
+    anker_a = anker_b = None
+    d = eerste
+    while d <= laatste:
+        if moving_avg(wbd, d) is not None:
+            if anker_a is None:
+                anker_a = d
+            anker_b = d
+        d += datetime.timedelta(days=1)
+    return anker_a, anker_b
 
 def maand_bereik(today: datetime.date):
     """(eerste_dag, laatste_dag, label) van de rapportmaand."""
@@ -168,21 +187,26 @@ def maak_grafiek(rows: list, wbd: dict, eerste: datetime.date, laatste: datetime
 
 # ── Samenvatting ──────────────────────────────────────────────────────────────
 def tdee_schatting(rows: list, wbd: dict, eerste: datetime.date, laatste: datetime.date) -> str:
-    dagen_span  = (laatste - eerste).days or 1
-    weigh_count = sum(1 for d in wbd if eerste <= d <= laatste)
-    ma_start    = moving_avg(wbd, eerste)
-    ma_eind     = moving_avg(wbd, laatste)
+    anker_a, anker_b = ma_ankers(wbd, eerste, laatste)
+    if not anker_a or not anker_b:
+        return "🔬 TDEE: te weinig wegingen deze maand"
 
-    if len(rows) < 10 or weigh_count < 8 or ma_start is None or ma_eind is None:
-        return "🔬 TDEE: onvoldoende data deze maand"
+    span = (anker_b - anker_a).days
+    if span < 10:
+        return "🔬 TDEE: gewichtshistoriek nog te kort (min. 10 dagen)"
 
-    avg_intake = sum(r["kcal"] for r in rows) / len(rows)
-    delta_kg   = ma_eind - ma_start
-    tdee       = avg_intake - (delta_kg * 7700 / dagen_span)
-    tdee_r     = round(tdee / 50) * 50
+    kcals = [r["kcal"] for r in rows if anker_a <= r["datum"] <= anker_b]
+    min_logged = max(7, round(span * 0.6))
+    if len(kcals) < min_logged:
+        return f"🔬 TDEE: te weinig gelogde dagen in de meetperiode ({len(kcals)}/{min_logged})"
+
+    ma_a = moving_avg(wbd, anker_a)
+    ma_b = moving_avg(wbd, anker_b)
+    tdee = sum(kcals) / len(kcals) - ((ma_b - ma_a) * 7700 / span)
+    tdee_r = round(tdee / 50) * 50
     if not 1500 <= tdee_r <= 4500:
         return "🔬 TDEE: onbetrouwbaar deze maand"
-    return f"🔬 Geschatte TDEE: ~{tdee_r} kcal/dag"
+    return f"🔬 Geschatte TDEE: ~{tdee_r} kcal/dag ({anker_a.strftime('%d/%m')}–{anker_b.strftime('%d/%m')})"
 
 def groq_reflectie(context: str) -> str:
     if not GROQ_API_KEY:
@@ -210,6 +234,19 @@ def main() -> None:
 
     maaltijden_raw = fetch_data("maaltijden", 70)
     gewichten_raw  = fetch_data("gewicht", 70)
+
+    if not maaltijden_raw:
+        if UNAUTHORIZED:
+            send_message(
+                "⚠️ Maandrapport: doGet weigerde de API-key.\n\n"
+                "Check of deze 3 exact dezelfde waarde hebben:\n"
+                "1. GitHub secret `APPS_SCRIPT_KEY`\n"
+                "2. Apps Script property `API_KEY`\n"
+                "3. En of er een *nieuwe versie* gedeployed is"
+            )
+        else:
+            send_message("⚠️ Maandrapport: kon geen data ophalen via doGet.")
+        return
 
     rows = []
     for r in maaltijden_raw:
@@ -257,13 +294,16 @@ def main() -> None:
     scores    = [r["score"] for r in rows if r["score"] > 0]
     avg_score = round(sum(scores) / len(scores), 1) if scores else 0
 
-    ma_start = moving_avg(wbd, eerste)
-    ma_eind  = moving_avg(wbd, laatste)
-    if ma_start is not None and ma_eind is not None:
-        diff = round(ma_eind - ma_start, 1)
-        gewicht_lijn = f"⚖️ {round(ma_start, 1)} → {round(ma_eind, 1)} kg ({'+' if diff > 0 else ''}{diff} kg, 7d gem.)"
+    anker_a, anker_b = ma_ankers(wbd, eerste, laatste)
+    if anker_a and anker_b and (anker_b - anker_a).days >= 7:
+        ma_a = moving_avg(wbd, anker_a)
+        ma_b = moving_avg(wbd, anker_b)
+        diff = round(ma_b - ma_a, 1)
+        gewicht_lijn = f"⚖️ {round(ma_a, 1)} → {round(ma_b, 1)} kg ({'+' if diff > 0 else ''}{diff} kg, 7d gem.)"
+    elif wbd:
+        gewicht_lijn = f"⚖️ Laatste gewicht: {wbd[max(wbd)]} kg (historiek nog te kort voor trend)"
     else:
-        gewicht_lijn = "⚖️ Te weinig wegingen voor een trend"
+        gewicht_lijn = "⚖️ Geen wegingen deze maand"
 
     # beste week op score
     weken: dict = {}
