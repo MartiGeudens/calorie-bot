@@ -69,6 +69,15 @@ function doPost(e) {
 
 
 function doGet(e) {
+  // Key-check: doGet werkt enkel met de juiste key, meegestuurd als ?key=...
+  // De key staat bewust NIET in deze file (publieke repo) maar in een Script
+  // Property: Projectinstellingen → Scripteigenschappen → "API_KEY".
+  // Zelfde waarde als de GitHub secret APPS_SCRIPT_KEY.
+  var apiKey = PropertiesService.getScriptProperties().getProperty("API_KEY");
+  if (!apiKey || !e || !e.parameter || e.parameter.key !== apiKey) {
+    return jsonResponse({ error: "unauthorized" });
+  }
+
   try {
     var type  = (e.parameter && e.parameter.type)  || "maaltijden";
     var limit = parseInt((e.parameter && e.parameter.limit) || "14");
