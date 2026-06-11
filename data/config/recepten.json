@@ -11,7 +11,7 @@
     "eiwitten": 37,
     "koolhydraten": 64,
     "vetten": 27,
-    "vezels": 0,
+    "vezels": 4,
     "macros_bron": "manueel"
   },
   "vanillecake": {
@@ -27,7 +27,7 @@
     "eiwitten": 5,
     "koolhydraten": 44,
     "vetten": 23,
-    "vezels": 0,
+    "vezels": 1,
     "macros_bron": "manueel"
   },
   "lunch_kipcurry": {
@@ -42,7 +42,7 @@
     "eiwitten": 31,
     "koolhydraten": 49,
     "vetten": 28,
-    "vezels": 0,
+    "vezels": 5,
     "macros_bron": "manueel"
   },
   "hartige_yoghurtbowl_gehakt": {
@@ -61,7 +61,7 @@
     "eiwitten": 51,
     "koolhydraten": 18,
     "vetten": 32,
-    "vezels": 0,
+    "vezels": 5,
     "macros_bron": "manueel"
   },
   "hartige_yoghurtbowl_linzen": {
@@ -82,7 +82,7 @@
     "eiwitten": 46,
     "koolhydraten": 42,
     "vetten": 22,
-    "vezels": 0,
+    "vezels": 15,
     "macros_bron": "manueel"
   },
   "cannelloni_gehakt_spinazie": {
@@ -98,7 +98,7 @@
     "eiwitten": 32,
     "koolhydraten": 55,
     "vetten": 28,
-    "vezels": 0,
+    "vezels": 4,
     "macros_bron": "manueel"
   },
   "lasagne_mama": {
@@ -114,6 +114,20 @@
     "eiwitten": 38,
     "koolhydraten": 62,
     "vetten": 32,
+    "vezels": 4,
+    "macros_bron": "manueel"
+  },
+  "vanillepudding_200g": {
+    "portie": "1 kom ~200g",
+    "ingredienten": [
+      "100g poeder Imperial vanillepudding",
+      "150g kristalsuiker",
+      "1500g volle melk"
+    ],
+    "calories": 220,
+    "eiwitten": 6,
+    "koolhydraten": 35,
+    "vetten": 6,
     "vezels": 0,
     "macros_bron": "manueel"
   }
