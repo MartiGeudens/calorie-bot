@@ -14,10 +14,11 @@ jobs:
           python-version: '3.11'
 
       - name: Installeer afhankelijkheden
-        run: pip install requests
+        run: pip install requests groq pytz
 
       - name: Stuur herinnering
         run: python scripts/remind.py
         env:
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          CHAT_ID:   ${{ secrets.CHAT_ID }}
+          BOT_TOKEN:    ${{ secrets.BOT_TOKEN }}
+          CHAT_ID:      ${{ secrets.CHAT_ID }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}

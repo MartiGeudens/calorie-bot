@@ -1,10 +1,15 @@
-name: Wekelijks overzicht (maandag 08:00)
+name: Maandrapport (1e van de maand 08:30)
 
 on:
-  workflow_dispatch:         # Getriggerd door cron-job.org elke maandag om 08:00
+  workflow_dispatch:         # Getriggerd door cron-job.org op de 1e van de maand om 08:30
+    inputs:
+      test_mode:
+        description: 'Test met huidige maand t.e.m. vandaag'
+        required: false
+        default: 'false'
 
 jobs:
-  weekly-summary:
+  maandrapport:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,13 +19,14 @@ jobs:
           python-version: '3.11'
 
       - name: Installeer afhankelijkheden
-        run: pip install requests groq pytz
+        run: pip install requests groq pytz matplotlib
 
-      - name: Stuur wekelijks overzicht
-        run: python scripts/weekly_summary.py
+      - name: Stuur maandrapport
+        run: python scripts/monthly_report.py
         env:
           BOT_TOKEN:       ${{ secrets.BOT_TOKEN }}
           CHAT_ID:         ${{ secrets.CHAT_ID }}
           GROQ_API_KEY:    ${{ secrets.GROQ_API_KEY }}
           APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
           APPS_SCRIPT_KEY: ${{ secrets.APPS_SCRIPT_KEY }}
+          TEST_MODE:       ${{ github.event.inputs.test_mode }}

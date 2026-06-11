@@ -10,6 +10,7 @@ BOT_TOKEN       = os.environ["BOT_TOKEN"]
 CHAT_ID         = int(os.environ["CHAT_ID"])
 GROQ_API_KEY    = os.environ["GROQ_API_KEY"]
 APPS_SCRIPT_URL = os.environ["APPS_SCRIPT_URL"]
+APPS_SCRIPT_KEY = os.environ.get("APPS_SCRIPT_KEY", "")
 
 BRUSSELS          = pytz.timezone("Europe/Brussels")
 BASE_URL          = f"https://api.telegram.org/bot{BOT_TOKEN}"
@@ -106,18 +107,70 @@ def get_recipe_context(food_text: str, recipes: dict) -> str:
         )
     return "\n".join(lines)
 
-def is_weight_message(text: str) -> bool:
-    """Kort bericht dat alleen een getal (30–200) bevat = gewichtsmeting, geen maaltijdlog."""
+def extract_weight(text: str):
+    """Geeft het gewicht (30–200 kg) terug als het bericht uitsluitend een getal is, anders None."""
     if len(text) > 30:
-        return False
+        return None
     match = re.fullmatch(r'\s*(\d+[.,]\d+|\d+)\s*(kg|kilo)?\s*', text, re.IGNORECASE)
     if match:
         try:
             val = float(match.group(1).replace(',', '.'))
-            return 30 <= val <= 200
+            if 30 <= val <= 200:
+                return val
         except ValueError:
             pass
-    return False
+    return None
+
+def is_weight_message(text: str) -> bool:
+    """Kort bericht dat alleen een getal (30–200) bevat = gewichtsmeting, geen maaltijdlog."""
+    return extract_weight(text) is not None
+
+def find_today_weight(updates: list):
+    """Zoekt het laatste gewichtsbericht van vandaag — vangnet voor metingen
+    die na de 15:00-check gestuurd zijn (die zouden anders verloren gaan
+    omdat clear_updates() ze om 23:58 definitief bevestigt)."""
+    start_of_day = datetime.datetime.now(BRUSSELS).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ).timestamp()
+    gewicht = None
+    for update in updates:
+        msg = update.get("message") or update.get("edited_message")
+        if not msg:
+            continue
+        sender = msg.get("from", {})
+        if sender.get("id") != CHAT_ID or sender.get("is_bot", False):
+            continue
+        if msg.get("date", 0) < start_of_day:
+            continue
+        w = extract_weight(msg.get("text", "").strip())
+        if w is not None:
+            gewicht = w  # laatste meting van de dag wint
+    return gewicht
+
+def weight_already_saved_today(today: str) -> bool:
+    """Checkt of de 15:00-run het gewicht van vandaag al heeft opgeslagen (voorkomt dubbele rijen)."""
+    try:
+        resp = requests.get(
+            APPS_SCRIPT_URL,
+            params={"type": "gewicht", "limit": 3, "key": APPS_SCRIPT_KEY},
+            timeout=15,
+            allow_redirects=False,
+        )
+        if resp.status_code in (301, 302, 303, 307, 308):
+            resp = requests.get(resp.headers.get("Location", ""), timeout=15)
+        rows = resp.json()
+        if not isinstance(rows, list):
+            return False
+        return any(str(r.get("datum", ""))[:10] == today for r in rows if isinstance(r, dict))
+    except Exception:
+        return False  # bij twijfel opslaan: een dubbele rij is beter dan een verloren meting
+
+def save_weight(datum: str, gewicht: float) -> bool:
+    payload = {"type": "gewicht", "datum": datum, "gewicht": gewicht}
+    resp = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15, allow_redirects=False)
+    if resp.status_code in (301, 302, 303, 307, 308):
+        resp = requests.get(resp.headers.get("Location", ""), timeout=15)
+    return resp.ok
 
 def collect_food_messages(updates: list) -> list:
     """Verzamelt alle maaltijdberichten van de afgelopen 24 uur, in chronologische volgorde."""
@@ -198,7 +251,7 @@ def calculate_streak(data_type: str) -> int:
     try:
         resp = requests.get(
             APPS_SCRIPT_URL,
-            params={"type": data_type, "limit": 60},
+            params={"type": data_type, "limit": 60, "key": APPS_SCRIPT_KEY},
             timeout=15,
             allow_redirects=False,
         )
@@ -259,10 +312,22 @@ def main() -> None:
     updates = get_updates()
 
     food_messages = collect_food_messages(updates)
+    late_weight   = find_today_weight(updates)
     clear_updates(updates)
 
+    weight_note = ""
+    if late_weight is not None and not weight_already_saved_today(today):
+        if save_weight(today, late_weight):
+            weight_note = f"⚖️ Gewicht alsnog opgeslagen: *{late_weight} kg*"
+            print(f"Gewicht-vangnet: {late_weight} kg opgeslagen voor {today}")
+        else:
+            weight_note = f"⚠️ Gewicht gevonden ({late_weight} kg) maar opslaan mislukte."
+
     if not food_messages:
-        send_message("😔 Geen maaltijden gevonden voor vandaag. Vergeet morgen niet te loggen!")
+        msg = "😔 Geen maaltijden gevonden voor vandaag. Vergeet morgen niet te loggen!"
+        if weight_note:
+            msg += f"\n\n{weight_note}"
+        send_message(msg)
         return
 
     food_text = "\n".join(food_messages)
@@ -335,9 +400,14 @@ def main() -> None:
         tekst = streak_tekst(streak)
         if tekst:
             msg += f"\n{tekst}"
+        if weight_note:
+            msg += f"\n{weight_note}"
         send_message(msg)
     else:
-        send_message("⚠️ Analyse gelukt, maar opslaan in spreadsheet mislukte.")
+        msg = "⚠️ Analyse gelukt, maar opslaan in spreadsheet mislukte."
+        if weight_note:
+            msg += f"\n{weight_note}"
+        send_message(msg)
 
 if __name__ == "__main__":
     main()

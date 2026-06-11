@@ -22,3 +22,4 @@ jobs:
           BOT_TOKEN:       ${{ secrets.BOT_TOKEN }}
           CHAT_ID:         ${{ secrets.CHAT_ID }}
           APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
+          APPS_SCRIPT_KEY: ${{ secrets.APPS_SCRIPT_KEY }}

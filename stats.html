@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#111111" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Statistieken</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #f5f5f5;
+      --card:     #ffffff;
+      --text:     #111111;
+      --subtext:  #888888;
+      --accent:   #111111;
+      --border:   #e5e5e5;
+      --shadow:   0 1px 4px rgba(0,0,0,0.06);
+      --groen:    #4c9a6e;
+      --rood:     #c95f5f;
+      --blauw:    #5b7fa6;
+      --geel:     #c9a227;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding-bottom: 40px;
+    }
+
+    header {
+      background: #111;
+      color: #fff;
+      padding: 18px 16px 14px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    header h1 { font-size: 1.1rem; font-weight: 600; letter-spacing: 0.3px; }
+    header .links a { color: #fff; text-decoration: none; font-size: 1.2rem; margin-left: 14px; }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      padding: 12px 16px 4px;
+    }
+
+    .period-btn {
+      border: 1px solid var(--border);
+      background: var(--card);
+      border-radius: 8px;
+      padding: 6px 14px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      color: var(--subtext);
+    }
+
+    .period-btn.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    main { padding: 8px 16px; max-width: 720px; margin: 0 auto; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin: 10px 0 16px;
+    }
+
+    .stat-card {
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 14px;
+    }
+
+    .stat-card .label { font-size: 0.72rem; color: var(--subtext); text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-card .value { font-size: 1.35rem; font-weight: 650; margin-top: 4px; }
+    .stat-card .sub   { font-size: 0.75rem; color: var(--subtext); margin-top: 2px; }
+
+    .chart-card {
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+
+    .chart-card h2 { font-size: 0.9rem; font-weight: 600; margin-bottom: 10px; }
+    .chart-wrap { position: relative; height: 230px; }
+
+    /* Setup / foutscherm */
+    .setup {
+      max-width: 420px;
+      margin: 60px auto;
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+    }
+
+    .setup h2 { font-size: 1rem; margin-bottom: 8px; }
+    .setup p  { font-size: 0.85rem; color: var(--subtext); margin-bottom: 14px; line-height: 1.45; }
+    .setup label { font-size: 0.78rem; font-weight: 600; display: block; margin: 10px 0 4px; }
+
+    .setup input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 11px;
+      font-size: 0.85rem;
+      outline: none;
+    }
+
+    .setup button {
+      margin-top: 16px;
+      width: 100%;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 11px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .setup .error { color: var(--rood); font-size: 0.82rem; margin-bottom: 10px; }
+    .loading { text-align: center; color: var(--subtext); padding: 60px 0; font-size: 0.9rem; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Statistieken</h1>
+  <div class="links">
+    <a href="#" id="settingsBtn" title="Instellingen">⚙️</a>
+    <a href="index.html" title="Receptenboek">📖</a>
+  </div>
+</header>
+
+<div id="setupScreen" class="setup hidden">
+  <h2>Verbinden met je data</h2>
+  <p>Vul één keer je Apps Script URL en API-key in. Ze worden alleen op dit toestel opgeslagen (localStorage) — nooit in de repo.</p>
+  <div class="error hidden" id="setupError"></div>
+  <label for="urlInput">Apps Script URL</label>
+  <input type="url" id="urlInput" placeholder="https://script.google.com/macros/s/…/exec" />
+  <label for="keyInput">API-key</label>
+  <input type="password" id="keyInput" placeholder="je geheime key" />
+  <button id="saveBtn">Opslaan &amp; laden</button>
+</div>
+
+<div id="dashboard" class="hidden">
+  <div class="toolbar">
+    <button class="period-btn" data-days="30">30 dagen</button>
+    <button class="period-btn" data-days="90">90 dagen</button>
+    <button class="period-btn" data-days="10000">Alles</button>
+  </div>
+
+  <main>
+    <div class="cards">
+      <div class="stat-card"><div class="label">Gewicht (7d gem.)</div><div class="value" id="cardGewicht">–</div><div class="sub" id="cardGewichtSub"></div></div>
+      <div class="stat-card"><div class="label">Gem. kcal/dag</div><div class="value" id="cardKcal">–</div><div class="sub" id="cardKcalSub"></div></div>
+      <div class="stat-card"><div class="label">Gem. score</div><div class="value" id="cardScore">–</div><div class="sub">van 10</div></div>
+      <div class="stat-card"><div class="label">Dagen gelogd</div><div class="value" id="cardDagen">–</div><div class="sub" id="cardDagenSub"></div></div>
+    </div>
+
+    <div class="chart-card"><h2>⚖️ Gewicht</h2><div class="chart-wrap"><canvas id="chartGewicht"></canvas></div></div>
+    <div class="chart-card"><h2>🔥 Calorieën per dag</h2><div class="chart-wrap"><canvas id="chartKcal"></canvas></div></div>
+    <div class="chart-card"><h2>💪 Eiwitten per dag</h2><div class="chart-wrap"><canvas id="chartEiwit"></canvas></div></div>
+    <div class="chart-card"><h2>🍽️ Verdeling per maaltijd (weekgemiddelde)</h2><div class="chart-wrap"><canvas id="chartMaaltijden"></canvas></div></div>
+    <div class="chart-card"><h2>⭐ Dagscore</h2><div class="chart-wrap"><canvas id="chartScore"></canvas></div></div>
+  </main>
+</div>
+
+<div id="loadingScreen" class="loading">Data laden…</div>
+
+<script>
+const LS_URL = "cb_script_url";
+const LS_KEY = "cb_api_key";
+
+let alleMaaltijden = [];   // [{datum: Date, kcal, eiwit, koolh, vet, vezel, score, ontbijt, lunch, avond, snacks}]
+let alleGewichten  = {};   // {"YYYY-MM-DD": kg}
+let doelen         = { kcal: 2750, eiwitten: 150 };  // fallback; echte waarden uit config.json
+let periodeDagen   = 30;
+const charts       = {};
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const dagMs = 86400000;
+const isoDag = d => d.toISOString().slice(0, 10);
+const num = v => { const n = Number(String(v ?? "").replace(",", ".")); return isFinite(n) ? n : 0; };
+
+function parseDatum(s) {
+  const m = String(s ?? "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : null;
+}
+
+function isoWeek(d) {
+  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const jan1 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return "W" + String(Math.ceil(((t - jan1) / dagMs + 1) / 7)).padStart(2, "0");
+}
+
+function movingAvg(gewichtenMap, eindDag, venster = 7) {
+  const vals = [];
+  for (let i = 0; i < venster; i++) {
+    const key = isoDag(new Date(eindDag.getTime() - i * dagMs));
+    if (key in gewichtenMap) vals.push(gewichtenMap[key]);
+  }
+  return vals.length >= 3 ? vals.reduce((a, b) => a + b) / vals.length : null;
+}
+
+// ── Data ophalen ─────────────────────────────────────────────────────────────
+async function fetchType(url, key, type) {
+  const r = await fetch(`${url}?type=${type}&limit=1000&key=${encodeURIComponent(key)}`);
+  const data = await r.json();
+  if (!Array.isArray(data)) throw new Error(data && data.error ? data.error : "onverwacht antwoord");
+  return data;
+}
+
+async function laadData() {
+  const url = localStorage.getItem(LS_URL);
+  const key = localStorage.getItem(LS_KEY);
+  if (!url || !key) { toonSetup(); return; }
+
+  toonLaden();
+  try {
+    // doelen uit de repo zelf (zelfde Pages-site)
+    try {
+      const cfg = await (await fetch("data/config/config.json")).json();
+      if (cfg && cfg.doelen) doelen = cfg.doelen;
+    } catch (e) { /* fallback-doelen blijven staan */ }
+
+    const [maaltijden, gewichten] = await Promise.all([
+      fetchType(url, key, "maaltijden"),
+      fetchType(url, key, "gewicht"),
+    ]);
+
+    alleMaaltijden = maaltijden
+      .map(r => ({
+        datum: parseDatum(r.datum), kcal: num(r.calories), eiwit: num(r.eiwitten),
+        score: num(r.score), ontbijt: num(r.ontbijt_kcal), lunch: num(r.lunch_kcal),
+        avond: num(r.avondeten_kcal), snacks: num(r.snacks_kcal),
+      }))
+      .filter(r => r.datum && r.kcal > 0)
+      .sort((a, b) => a.datum - b.datum);
+
+    alleGewichten = {};
+    for (const r of gewichten) {
+      const d = parseDatum(r.datum), g = num(r.gewicht);
+      if (d && g > 0) alleGewichten[isoDag(d)] = g;
+    }
+
+    toonDashboard();
+    render();
+  } catch (e) {
+    toonSetup(`Laden mislukt: ${e.message}. Controleer URL en key.`);
+  }
+}
+
+// ── Schermen ─────────────────────────────────────────────────────────────────
+function toonSetup(fout) {
+  $("loadingScreen").classList.add("hidden");
+  $("dashboard").classList.add("hidden");
+  $("setupScreen").classList.remove("hidden");
+  $("urlInput").value = localStorage.getItem(LS_URL) || "";
+  const err = $("setupError");
+  if (fout) { err.textContent = fout; err.classList.remove("hidden"); }
+  else err.classList.add("hidden");
+}
+
+function toonLaden() {
+  $("setupScreen").classList.add("hidden");
+  $("dashboard").classList.add("hidden");
+  $("loadingScreen").classList.remove("hidden");
+}
+
+function toonDashboard() {
+  $("loadingScreen").classList.add("hidden");
+  $("setupScreen").classList.add("hidden");
+  $("dashboard").classList.remove("hidden");
+}
+
+// ── Renderen ─────────────────────────────────────────────────────────────────
+function maakChart(id, config) {
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart($(id), config);
+}
+
+function doelLijn(labels, waarde, kleur) {
+  return {
+    type: "line", label: "Doel", data: labels.map(() => waarde),
+    borderColor: kleur, borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, fill: false,
+  };
+}
+
+const basisOpties = {
+  responsive: true, maintainAspectRatio: false,
+  plugins: { legend: { display: false } },
+  scales: { x: { ticks: { maxTicksLimit: 8, font: { size: 10 } }, grid: { display: false } },
+            y: { ticks: { font: { size: 10 } } } },
+};
+
+function render() {
+  const nu      = new Date();
+  const vanaf   = new Date(nu.getTime() - periodeDagen * dagMs);
+  const rows    = alleMaaltijden.filter(r => r.datum >= vanaf);
+  const labels  = rows.map(r => isoDag(r.datum).slice(5));
+
+  // ── samenvattingskaarten
+  const maNu  = movingAvg(alleGewichten, nu);
+  const maVor = movingAvg(alleGewichten, new Date(nu.getTime() - 30 * dagMs));
+  $("cardGewicht").textContent = maNu ? maNu.toFixed(1) + " kg" : "–";
+  $("cardGewichtSub").textContent = (maNu && maVor)
+    ? `${(maNu - maVor) >= 0 ? "+" : ""}${(maNu - maVor).toFixed(1)} kg vs. 30d geleden` : "";
+
+  const gemKcal = rows.length ? Math.round(rows.reduce((s, r) => s + r.kcal, 0) / rows.length) : 0;
+  $("cardKcal").textContent = gemKcal || "–";
+  $("cardKcalSub").textContent = `doel: ${doelen.kcal}`;
+
+  const scores = rows.filter(r => r.score > 0);
+  $("cardScore").textContent = scores.length
+    ? (scores.reduce((s, r) => s + r.score, 0) / scores.length).toFixed(1) : "–";
+
+  const totDagen = Math.min(periodeDagen, Math.max(1, Math.round((nu - (alleMaaltijden[0]?.datum || nu)) / dagMs) + 1));
+  $("cardDagen").textContent = rows.length;
+  $("cardDagenSub").textContent = `van ${totDagen} dagen`;
+
+  // ── gewicht: ruwe punten + 7d gemiddelde
+  const gewichtDagen = [];
+  for (let t = vanaf.getTime(); t <= nu.getTime(); t += dagMs) gewichtDagen.push(new Date(t));
+  const gLabels = gewichtDagen.map(d => isoDag(d).slice(5));
+  const ruw     = gewichtDagen.map(d => alleGewichten[isoDag(d)] ?? null);
+  const ma      = gewichtDagen.map(d => { const v = movingAvg(alleGewichten, d); return v ? +v.toFixed(2) : null; });
+
+  maakChart("chartGewicht", {
+    type: "line",
+    data: { labels: gLabels, datasets: [
+      { label: "Meting", data: ruw, borderColor: "rgba(91,127,166,0.35)", backgroundColor: "rgba(91,127,166,0.6)",
+        pointRadius: 2.5, borderWidth: 1, spanGaps: true },
+      { label: "7d gemiddelde", data: ma, borderColor: "#111", borderWidth: 2, pointRadius: 0, spanGaps: true },
+    ]},
+    options: { ...basisOpties, plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 10 } } } } },
+  });
+
+  // ── kcal per dag
+  maakChart("chartKcal", {
+    type: "bar",
+    data: { labels, datasets: [
+      { data: rows.map(r => r.kcal),
+        backgroundColor: rows.map(r => r.kcal > doelen.kcal ? "rgba(201,95,95,0.75)" : "rgba(76,154,110,0.75)") },
+      doelLijn(labels, doelen.kcal, "#111"),
+    ]},
+    options: basisOpties,
+  });
+
+  // ── eiwit per dag
+  maakChart("chartEiwit", {
+    type: "bar",
+    data: { labels, datasets: [
+      { data: rows.map(r => r.eiwit), backgroundColor: "rgba(91,127,166,0.75)" },
+      doelLijn(labels, doelen.eiwitten, "#111"),
+    ]},
+    options: basisOpties,
+  });
+
+  // ── maaltijdverdeling per week (gestapeld gemiddelde)
+  const weken = {};
+  for (const r of rows) {
+    const w = r.datum.getUTCFullYear() + " " + isoWeek(r.datum);
+    (weken[w] = weken[w] || []).push(r);
+  }
+  const weekKeys = Object.keys(weken);
+  const gem = (arr, k) => Math.round(arr.reduce((s, r) => s + r[k], 0) / arr.length);
+
+  maakChart("chartMaaltijden", {
+    type: "bar",
+    data: {
+      labels: weekKeys.map(k => k.split(" ")[1]),
+      datasets: [
+        { label: "Ontbijt",   data: weekKeys.map(k => gem(weken[k], "ontbijt")), backgroundColor: "#c9a227" },
+        { label: "Lunch",     data: weekKeys.map(k => gem(weken[k], "lunch")),   backgroundColor: "#5b7fa6" },
+        { label: "Avondeten", data: weekKeys.map(k => gem(weken[k], "avond")),   backgroundColor: "#4c9a6e" },
+        { label: "Snacks",    data: weekKeys.map(k => gem(weken[k], "snacks")),  backgroundColor: "#c95f5f" },
+      ],
+    },
+    options: { ...basisOpties,
+      plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 10 } } } },
+      scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true } } },
+  });
+
+  // ── score
+  maakChart("chartScore", {
+    type: "line",
+    data: { labels, datasets: [
+      { data: rows.map(r => r.score || null), borderColor: "#111", borderWidth: 2,
+        pointRadius: 2.5, pointBackgroundColor: "#111", spanGaps: true },
+    ]},
+    options: { ...basisOpties, scales: { ...basisOpties.scales, y: { min: 0, max: 10, ticks: { stepSize: 2, font: { size: 10 } } } } },
+  });
+}
+
+// ── Events ───────────────────────────────────────────────────────────────────
+document.querySelectorAll(".period-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".period-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    periodeDagen = +btn.dataset.days;
+    render();
+  });
+});
+document.querySelector('.period-btn[data-days="30"]').classList.add("active");
+
+$("saveBtn").addEventListener("click", () => {
+  const url = $("urlInput").value.trim();
+  const key = $("keyInput").value.trim();
+  if (!url || !key) { toonSetup("Vul beide velden in."); return; }
+  localStorage.setItem(LS_URL, url);
+  localStorage.setItem(LS_KEY, key);
+  laadData();
+});
+
+$("settingsBtn").addEventListener("click", e => { e.preventDefault(); toonSetup(); });
+
+laadData();
+</script>
+
+</body>
+</html>

@@ -7,6 +7,7 @@ import pytz
 BOT_TOKEN       = os.environ["BOT_TOKEN"]
 CHAT_ID         = int(os.environ["CHAT_ID"])
 APPS_SCRIPT_URL = os.environ["APPS_SCRIPT_URL"]
+APPS_SCRIPT_KEY = os.environ.get("APPS_SCRIPT_KEY", "")
 
 BRUSSELS = pytz.timezone("Europe/Brussels")
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
@@ -43,7 +44,7 @@ def calculate_streak(data_type: str) -> int:
     try:
         resp = requests.get(
             APPS_SCRIPT_URL,
-            params={"type": data_type, "limit": 60},
+            params={"type": data_type, "limit": 60, "key": APPS_SCRIPT_KEY},
             timeout=15,
             allow_redirects=False,
         )

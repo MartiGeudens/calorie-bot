@@ -10,6 +10,7 @@ BOT_TOKEN       = os.environ["BOT_TOKEN"]
 CHAT_ID         = os.environ["CHAT_ID"]
 APPS_SCRIPT_URL = os.environ["APPS_SCRIPT_URL"]
 GROQ_API_KEY    = os.environ["GROQ_API_KEY"]
+APPS_SCRIPT_KEY = os.environ.get("APPS_SCRIPT_KEY", "")
 
 BRUSSELS    = pytz.timezone("Europe/Brussels")
 BASE_URL    = f"https://api.telegram.org/bot{BOT_TOKEN}"
@@ -33,7 +34,7 @@ def send_message(text: str) -> None:
 
 def fetch_data(data_type: str, limit: int) -> list:
     url = APPS_SCRIPT_URL
-    params = {"type": data_type, "limit": limit}
+    params = {"type": data_type, "limit": limit, "key": APPS_SCRIPT_KEY}
     print(f"[DEBUG] GET {url} params={params}")
 
     resp = requests.get(url, params=params, timeout=15, allow_redirects=False)
@@ -77,6 +78,73 @@ def score_avg(rows: list) -> float:
     vals = [v for v in vals if v is not None]
     return round(sum(vals) / len(vals), 1) if vals else 0.0
 
+def parse_date(s) -> datetime.date | None:
+    try:
+        return datetime.date.fromisoformat(str(s)[:10])
+    except ValueError:
+        return None
+
+def weights_by_date(gewichten: list) -> dict:
+    """{date: kg} voor alle geldige wegingen."""
+    out = {}
+    for r in gewichten:
+        if not isinstance(r, dict):
+            continue
+        d = parse_date(r.get("datum", ""))
+        w = safe_num(r.get("gewicht"))
+        if d and w > 0:
+            out[d] = w
+    return out
+
+def moving_avg(wbd: dict, end: datetime.date, window: int = 7):
+    """7-daags voortschrijdend gemiddelde t.e.m. `end`. Minstens 3 wegingen nodig, anders None."""
+    vals = [
+        wbd[end - datetime.timedelta(days=i)]
+        for i in range(window)
+        if (end - datetime.timedelta(days=i)) in wbd
+    ]
+    return round(sum(vals) / len(vals), 2) if len(vals) >= 3 else None
+
+def tdee_blok(maaltijden: list, wbd: dict, today: datetime.date) -> str:
+    """Schat de werkelijke TDEE over 14 dagen: gem. intake − (Δkg_gesmoothed × 7700 / 14).
+    Alleen tonen als er genoeg data is, anders een eerlijke 'nog niet genoeg data'-melding."""
+    window  = 14
+    start_d = today - datetime.timedelta(days=window)
+
+    kcals = []
+    for r in maaltijden:
+        if not isinstance(r, dict):
+            continue
+        d = parse_date(r.get("datum", ""))
+        c = safe_num(r.get("calories"))
+        if d and c > 0 and start_d < d <= today:
+            kcals.append(c)
+
+    weigh_count = sum(1 for d in wbd if start_d <= d <= today)
+    ma_end   = moving_avg(wbd, today)
+    ma_start = moving_avg(wbd, start_d)
+
+    if len(kcals) < 10 or weigh_count < 8 or ma_end is None or ma_start is None:
+        return (
+            f"\n🔬 *TDEE-schatting:* nog onvoldoende data "
+            f"({len(kcals)}/10 dagen gelogd, {weigh_count}/8 wegingen in 14 dagen)\n"
+        )
+
+    avg_intake = sum(kcals) / len(kcals)
+    delta_kg   = ma_end - ma_start
+    tdee       = avg_intake - (delta_kg * 7700 / window)
+    tdee_r     = round(tdee / 50) * 50
+
+    if not 1500 <= tdee_r <= 4500:
+        return "\n🔬 *TDEE-schatting:* onbetrouwbaar deze periode — check je logs en wegingen\n"
+
+    proj = (DOEL_KCAL - tdee) * 7 / 7700  # kg/week bij doelintake
+    sign = "+" if proj > 0 else ""
+    return (
+        f"\n🔬 *Geschatte TDEE:* ~{tdee_r} kcal/dag\n"
+        f"  Aan je doel van {DOEL_KCAL} kcal ≈ {sign}{round(proj, 2)} kg/week\n"
+    )
+
 def trend_str(this_val: float, prev_val: float) -> str:
     if not prev_val:
         return ""
@@ -90,8 +158,8 @@ def main() -> None:
     now      = datetime.datetime.now(BRUSSELS)
     week_num = now.isocalendar()[1]
 
-    maaltijden = fetch_data("maaltijden", 14)
-    gewichten  = fetch_data("gewicht", 14)
+    maaltijden = fetch_data("maaltijden", 25)
+    gewichten  = fetch_data("gewicht", 25)
 
     if not maaltijden:
         send_message("📊 Kon geen maaltijddata ophalen voor het wekelijks overzicht.")
@@ -133,14 +201,24 @@ def main() -> None:
             f"  Score:     {trend_str(avg_score, prev_score)}\n"
         )
 
+    # Gewichtstrend op basis van 7-daags voortschrijdend gemiddelde (dagelijkse
+    # schommelingen door vocht/maaginhoud filteren eruit)
+    wbd     = weights_by_date(gewichten)
+    today_d = now.date()
+    ma_now  = moving_avg(wbd, today_d)
+    ma_prev = moving_avg(wbd, today_d - datetime.timedelta(days=7))
+
     gewicht_tekst = ""
-    gew_vals = [safe_num(r.get("gewicht")) for r in gewichten if safe_num(r.get("gewicht")) > 0]
-    if len(gew_vals) >= 2:
-        diff = round(gew_vals[-1] - gew_vals[0], 1)
+    if ma_now is not None and ma_prev is not None:
+        diff = round(ma_now - ma_prev, 1)
         sign = "+" if diff > 0 else ""
-        gewicht_tekst = f"\n⚖️ Gewicht: {gew_vals[0]} kg → {gew_vals[-1]} kg ({sign}{diff} kg)\n"
-    elif gew_vals:
-        gewicht_tekst = f"\n⚖️ Huidig gewicht: {gew_vals[-1]} kg\n"
+        gewicht_tekst = (
+            f"\n⚖️ Gewicht (7-daags gem.): {round(ma_prev, 1)} kg → "
+            f"{round(ma_now, 1)} kg ({sign}{diff} kg)\n"
+        )
+    elif wbd:
+        laatste_datum = max(wbd)
+        gewicht_tekst = f"\n⚖️ Huidig gewicht: {wbd[laatste_datum]} kg\n"
 
     def doel_diff(gemiddelde, doel):
         diff = gemiddelde - doel
@@ -194,7 +272,7 @@ def main() -> None:
     if meal_lines:
         message += f"\n🍽️ *Verdeling per maaltijd:*\n{meal_lines}"
 
-    message += f"{doel_blok}{prev_blok}\n💬 _{ai_tip}_"
+    message += f"{doel_blok}{tdee_blok(maaltijden, wbd, today_d)}{prev_blok}\n💬 _{ai_tip}_"
 
     send_message(message)
 
