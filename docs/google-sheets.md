@@ -29,84 +29,29 @@ Add a second sheet named `Gewicht` with headers in row 1:
 
 ## 3. Set up Apps Script
 
-1. In the spreadsheet, go to **Extensions > Apps Script**.
-2. Delete the default code and paste the following:
+1. In the spreadsheet, go to **Extensions > Apps Script** (this binds the script to the spreadsheet — no spreadsheet ID needed).
+2. Delete the default code and paste the full contents of [`scripts/apps_script.js`](../scripts/apps_script.js) from this repo.
+3. In `exportNaarDoc()`: replace the Google Doc ID with your own, or delete the whole function if you don't use the Doc sync (optional feature, see step 6).
+4. Save the script (Ctrl+S).
 
-```javascript
-const SPREADSHEET_ID = "YOUR_SPREADSHEET_ID_HERE";
+The script contains:
+- `doPost(e)` — receives data from GitHub Actions and appends rows
+- `doGet(e)` — returns the last N rows as JSON (used by the weekly/monthly reports, streak checks and the stats dashboard). Protected by an API key.
+- `exportNaarDoc()` — optional daily export to a Google Doc
+- `testMaaltijd()` / `testGewicht()` — run these from the editor to verify the sheet wiring
 
-function doPost(e) {
-  const data = JSON.parse(e.postData.contents);
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+## 4. Set the API key
 
-  if (data.type === "gewicht") {
-    const sheet = ss.getSheetByName("Gewicht");
-    sheet.appendRow([data.datum, data.gewicht]);
-    return ContentService.createTextOutput("OK");
-  }
+`doGet` only responds when the request carries the right key, so your weight/meal data stays private even though the web app URL is callable by anyone.
 
-  const sheet = ss.getSheetByName("Maaltijden");
-  sheet.appendRow([
-    data.datum,
-    data.maaltijden,
-    data.calories,
-    data.eiwitten,
-    data.koolhydraten,
-    data.vetten,
-    data.vezels,
-    data.score,
-    data.notities,
-    data.ontbijt_kcal,
-    data.lunch_kcal,
-    data.avondeten_kcal,
-    data.snacks_kcal,
-  ]);
-  return ContentService.createTextOutput("OK");
-}
+1. Choose a long random string (30+ characters).
+2. In Apps Script: **Project Settings (⚙️) > Script Properties > Add script property**
+   - Property: `API_KEY`
+   - Value: your random string
 
-function doGet(e) {
-  const type = e.parameter.type || "maaltijden";
-  const limit = parseInt(e.parameter.limit) || 14;
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+You will use this same value as the `APPS_SCRIPT_KEY` GitHub secret and in the stats dashboard.
 
-  const sheetName = type === "gewicht" ? "Gewicht" : "Maaltijden";
-  const sheet = ss.getSheetByName(sheetName);
-  const data = sheet.getDataRange().getValues();
-
-  if (data.length <= 1) return ContentService.createTextOutput(JSON.stringify([])).setMimeType(ContentService.MimeType.JSON);
-
-  const headers = data[0].map(h => h.toString().toLowerCase().replace(/[^a-z0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, ""));
-  const rows = data.slice(1).slice(-limit).map(row =>
-    Object.fromEntries(headers.map((h, i) => [h, row[i]]))
-  );
-  return ContentService.createTextOutput(JSON.stringify(rows)).setMimeType(ContentService.MimeType.JSON);
-}
-
-function exportNaarDoc() {
-  const DOC_ID = "YOUR_GOOGLE_DOC_ID_HERE";
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const doc = DocumentApp.openById(DOC_ID);
-  const body = doc.getBody();
-  body.clear();
-
-  const maaltijden = ss.getSheetByName("Maaltijden").getDataRange().getValues();
-  const gewicht = ss.getSheetByName("Gewicht").getDataRange().getValues();
-
-  body.appendParagraph("Maaltijden").setHeading(DocumentApp.ParagraphHeading.HEADING1);
-  maaltijden.forEach(row => body.appendParagraph(row.join(" | ")));
-
-  body.appendParagraph("Gewicht").setHeading(DocumentApp.ParagraphHeading.HEADING1);
-  gewicht.forEach(row => body.appendParagraph(row.join(" | ")));
-
-  doc.saveAndClose();
-}
-```
-
-3. Replace `YOUR_SPREADSHEET_ID_HERE` with your spreadsheet ID.
-4. If you use the Claude Project sync (optional): replace `YOUR_GOOGLE_DOC_ID_HERE` with your Google Doc ID.
-5. Save the script (Ctrl+S).
-
-## 4. Deploy as web app
+## 5. Deploy as web app
 
 1. Click **Deploy > New deployment**.
 2. Click the gear icon next to "Select type" and choose **Web app**.
@@ -120,18 +65,19 @@ function exportNaarDoc() {
    https://script.google.com/macros/s/AKfycb.../exec
    ```
 
-Save this URL as the `APPS_SCRIPT_URL` GitHub secret.
+Verify in a browser: `<URL>?type=maaltijden&limit=2&key=<your key>` should return JSON (an empty `[]` is fine); without the key you should get `{"error":"unauthorized"}`.
 
-## 5. Add to GitHub secrets
+## 6. Add to GitHub secrets
 
 1. Go to **Settings > Secrets and variables > Actions** in your repo.
 2. Add:
 
 | Name | Value |
 |---|---|
-| `APPS_SCRIPT_URL` | The web app URL from step 4 |
+| `APPS_SCRIPT_URL` | The web app URL from step 5 |
+| `APPS_SCRIPT_KEY` | The API key from step 4 |
 
-## 6. Set up daily export trigger (optional)
+## 7. Set up daily export trigger (optional)
 
 If you want data synced to a Google Doc for use in Claude:
 
@@ -146,5 +92,5 @@ If you want data synced to a Google Doc for use in Claude:
 
 ## Notes
 
-- Every time you redeploy the Apps Script, the URL changes. Update the `APPS_SCRIPT_URL` secret if you redeploy.
-- To update the script without changing the URL: use **Deploy > Manage deployments > Edit** (pencil icon) and select "New version".
+- **Updating the script later?** Always use **Deploy > Manage deployments > Edit (✏️) > Version: New** — this keeps the URL stable. Creating a *new deployment* generates a new URL and breaks everything pointing at the old one (GitHub secret, dashboard).
+- The `Gewicht` tab is created automatically on the first weight entry if it doesn't exist.

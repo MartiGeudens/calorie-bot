@@ -39,10 +39,13 @@ For each row in the table below, create one job in cron-job.org.
 | Gewichtsvraag | `.../gewicht-vraag.yml/dispatches` | Daily at 09:00 |
 | Gewicht check | `.../gewicht-check.yml/dispatches` | Daily at 15:00 |
 | Herinnering | `.../herinnering.yml/dispatches` | Daily at 21:00 |
-| Verwerking | `.../verwerking.yml/dispatches` | Daily at 00:00 |
+| Verwerking | `.../verwerking.yml/dispatches` | Daily at **23:58** |
 | Wekelijks overzicht | `.../weekly-samenvatting.yaml/dispatches` | Monday at 08:00 |
+| Maandrapport | `.../monthly-rapport.yml/dispatches` | 1st of the month at 08:30 |
 | Tips check | `.../tips-check.yml/dispatches` | Every 10 min staggered: `9,19,29,39,49,59 * * * *` |
 | Recept check | `.../recept-check.yml/dispatches` | Every 30 min staggered: `5,35 * * * *` |
+
+> **Why 23:58 and not 00:00?** The daily processing must run *before* midnight: the script stamps the row with the current date, and Telegram only keeps unconfirmed messages for 24 hours. Running at 23:58 keeps the date correct and the message window safely inside that limit.
 
 **Full URL base** (replace `...` above):
 ```
