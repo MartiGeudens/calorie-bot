@@ -4,13 +4,21 @@ function exportNaarDoc() {
   var body = doc.getBody();
   body.clear();
 
+  // Gewicht — max laatste 365 rijen, alles in 1 appendParagraph ipv loop
+  var gewichtSheet = ss.getSheetByName("Gewicht");
+  var gewicht = gewichtSheet ? gewichtSheet.getDataRange().getValues() : [];
   body.appendParagraph("GEWICHT").setHeading(DocumentApp.ParagraphHeading.HEADING1);
-  var gewicht = ss.getSheetByName("Gewicht").getDataRange().getValues();
-  gewicht.forEach(r => body.appendParagraph(r.join(" | ")));
+  if (gewicht.length > 0) {
+    body.appendParagraph(gewicht.slice(-365).map(r => r.join(" | ")).join("\n"));
+  }
 
+  // Maaltijden — laatste 31 dagen, alles in 1 appendParagraph ipv loop
+  var maaltijdenSheet = ss.getSheetByName("Maaltijden");
+  var maaltijden = maaltijdenSheet ? maaltijdenSheet.getDataRange().getValues() : [];
   body.appendParagraph("MAALTIJDEN").setHeading(DocumentApp.ParagraphHeading.HEADING1);
-  var maaltijden = ss.getSheetByName("Maaltijden").getDataRange().getValues();
-  maaltijden.slice(-31).forEach(r => body.appendParagraph(r.join(" | ")));
+  if (maaltijden.length > 0) {
+    body.appendParagraph(maaltijden.slice(-31).map(r => r.join(" | ")).join("\n"));
+  }
 
   doc.saveAndClose();
 }

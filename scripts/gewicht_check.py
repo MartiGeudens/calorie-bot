@@ -24,11 +24,11 @@ def get_updates():
     return resp.json().get("result", [])
 
 def extract_weight(text):
-    """Zoekt een getal tussen 30 en 200 in de tekst (gewicht in kg)."""
+    """Zoekt een getal tussen 30 en 200 in de tekst (gewicht in kg).
+    Het bericht moet uitsluitend een getal zijn (optioneel gevolgd door kg/kilo),
+    zodat voedselberichten zoals '200 gram rijsttaart' niet worden herkend als gewicht."""
     text = text.strip()
-    if len(text) > 50:
-        return None
-    match = re.search(r'\b(\d+[.,]\d+|\d+)\s*(?:kg|kilo)?\b', text, re.IGNORECASE)
+    match = re.fullmatch(r'(\d+[.,]\d+|\d+)\s*(?:kg|kilo)?', text, re.IGNORECASE)
     if match:
         try:
             weight = float(match.group(1).replace(',', '.'))
