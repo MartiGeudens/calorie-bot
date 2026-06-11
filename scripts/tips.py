@@ -26,6 +26,11 @@ DOEL_EIWIT = _cfg["eiwitten"]
 DOEL_KOOLH = _cfg["koolhydraten"]
 DOEL_VET   = _cfg["vetten"]
 DOEL_VEZEL = _cfg["vezels"]
+RICHTING_TEKST = {
+    "aankomen":    "aankomen — een calorie-surplus en voldoende eiwit zijn gewenst; het resterende budget mag zeker opgegeten worden",
+    "afvallen":    "afvallen — een calorie-tekort is gewenst",
+    "onderhouden": "gewicht onderhouden — rond het caloriedoel eten is gewenst",
+}.get(_cfg.get("richting", "onderhouden"), _cfg.get("richting", "onderhouden"))
 
 groq_client = Groq(api_key=GROQ_API_KEY)
 
@@ -139,6 +144,7 @@ Dagelijkse doelen van deze persoon:
 - Koolhydraten: {DOEL_KOOLH}g
 - Vetten: {DOEL_VET}g
 - Vezels: {DOEL_VEZEL}g
+- Richting: {RICHTING_TEKST}
 {recipe_context}
 
 Maaltijden tot nu toe:

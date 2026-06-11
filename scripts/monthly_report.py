@@ -35,6 +35,11 @@ def load_doelen() -> dict:
 _doelen    = load_doelen()
 DOEL_KCAL  = _doelen["kcal"]
 DOEL_EIWIT = _doelen["eiwitten"]
+RICHTING_TEKST = {
+    "aankomen":    "aankomen — een calorie-surplus en voldoende eiwit zijn gewenst; gewichtsverlies is hier juist ongewenst",
+    "afvallen":    "afvallen — een calorie-tekort is gewenst",
+    "onderhouden": "gewicht onderhouden — rond het caloriedoel eten is gewenst",
+}.get(_doelen.get("richting", "onderhouden"), _doelen.get("richting", "onderhouden"))
 
 def send_message(text: str) -> None:
     requests.post(f"{BASE_URL}/sendMessage", json={
@@ -216,9 +221,11 @@ def groq_reflectie(context: str) -> str:
         resp = Groq(api_key=GROQ_API_KEY).chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": (
-                f"Maandoverzicht voeding: {context}\n"
-                "Geef één korte reflectie (max 2 zinnen, Nederlands, casual, persoonlijk) "
-                "over deze maand met het belangrijkste aandachtspunt. Geen aanhef."
+                f"Maandoverzicht voeding van Marti: {context}\n"
+                f"Doel-richting: {RICHTING_TEKST}.\n"
+                "Geef één korte reflectie (max 2 zinnen, Nederlands, casual) over deze maand "
+                "met het belangrijkste aandachtspunt, rekening houdend met de doel-richting. "
+                "Spreek Marti rechtstreeks aan met 'je'. Geen aanhef."
             )}],
             temperature=0.6,
             max_tokens=100,

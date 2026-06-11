@@ -27,6 +27,11 @@ DOEL_EIWIT = _cfg["eiwitten"]
 DOEL_KOOLH = _cfg["koolhydraten"]
 DOEL_VET   = _cfg["vetten"]
 DOEL_VEZEL = _cfg["vezels"]
+RICHTING_TEKST = {
+    "aankomen":    "aankomen — een calorie-surplus en voldoende eiwit zijn gewenst; te weinig eten is hier het probleem, niet te veel",
+    "afvallen":    "afvallen — een calorie-tekort is gewenst",
+    "onderhouden": "gewicht onderhouden — rond het caloriedoel eten is gewenst",
+}.get(_cfg.get("richting", "onderhouden"), _cfg.get("richting", "onderhouden"))
 
 groq_client = Groq(api_key=GROQ_API_KEY)
 
@@ -212,8 +217,9 @@ Dagelijkse doelen van deze persoon:
 - Koolhydraten: {DOEL_KOOLH}g
 - Vetten: {DOEL_VET}g
 - Vezels: {DOEL_VEZEL}g
+- Richting: {RICHTING_TEKST}
 
-Gebruik deze doelen als referentie voor de score (1–10) en de notitie. Een score van 10 = doelen perfect behaald.{recipe_context}
+Gebruik deze doelen én de richting als referentie voor de score (1–10) en de notitie. Een score van 10 = doelen perfect behaald.{recipe_context}
 
 Maaltijden van vandaag (meerdere berichten, chronologisch):
 {food_text}
@@ -290,6 +296,7 @@ def stuur_score_alert(food_text: str, score: int) -> None:
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": (
                 f"Maaltijden van vandaag (score {score}/10):\n{food_text}\n\n"
+                f"Doel-richting: {RICHTING_TEKST}.\n"
                 "Geef één concrete, budgetvriendelijke tip om de voedingskwaliteit morgen te verbeteren. "
                 "Max 2 zinnen, Nederlands, direct en praktisch. Geen aanhef."
             )}],

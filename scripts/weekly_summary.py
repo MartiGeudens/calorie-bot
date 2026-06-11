@@ -26,6 +26,11 @@ DOEL_EIWIT = _cfg["eiwitten"]
 DOEL_KOOLH = _cfg["koolhydraten"]
 DOEL_VET   = _cfg["vetten"]
 DOEL_VEZEL = _cfg["vezels"]
+RICHTING_TEKST = {
+    "aankomen":    "aankomen — een calorie-surplus en voldoende eiwit zijn gewenst; te weinig eten is hier het probleem, niet te veel",
+    "afvallen":    "afvallen — een calorie-tekort is gewenst",
+    "onderhouden": "gewicht onderhouden — rond het caloriedoel eten is gewenst",
+}.get(_cfg.get("richting", "onderhouden"), _cfg.get("richting", "onderhouden"))
 
 def send_message(text: str) -> None:
     requests.post(f"{BASE_URL}/sendMessage", json={
@@ -276,6 +281,7 @@ def main() -> None:
     recent_notes = [r.get("notities", "") for r in this_week if r.get("notities")]
     context_for_ai = (
         f"Doelen: {DOEL_KCAL} kcal, {DOEL_EIWIT}g eiwit, {DOEL_KOOLH}g koolh, {DOEL_VET}g vet, {DOEL_VEZEL}g vezels. "
+        f"Doel-richting: {RICHTING_TEKST}. "
         f"Gemiddeld deze week: {avg_cal} kcal, {avg_eiwit}g eiwit, score {avg_score}/10. "
         f"Notities: {'; '.join(recent_notes[-3:]) if recent_notes else 'geen'}."
     )

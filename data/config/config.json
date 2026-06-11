@@ -4,6 +4,7 @@
     "eiwitten": 150,
     "koolhydraten": 320,
     "vetten": 85,
-    "vezels": 30
+    "vezels": 30,
+    "richting": "aankomen"
   }
 }
