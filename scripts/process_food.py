@@ -6,6 +6,8 @@ import requests
 import pytz
 from groq import Groq
 
+from intervals import activiteiten_tussen, sport_kcal_totaal, sport_regel, dagdoel
+
 BOT_TOKEN       = os.environ["BOT_TOKEN"]
 CHAT_ID         = int(os.environ["CHAT_ID"])
 GROQ_API_KEY    = os.environ["GROQ_API_KEY"]
@@ -27,6 +29,7 @@ DOEL_EIWIT = _cfg["eiwitten"]
 DOEL_KOOLH = _cfg["koolhydraten"]
 DOEL_VET   = _cfg["vetten"]
 DOEL_VEZEL = _cfg["vezels"]
+SPORT_COMPENSATIE = float(_cfg.get("sport_compensatie", 1.0))
 RICHTING_TEKST = {
     "aankomen":    "aankomen — een calorie-surplus en voldoende eiwit zijn gewenst; te weinig eten is hier het probleem, niet te veel",
     "afvallen":    "afvallen — een calorie-tekort is gewenst",
@@ -204,9 +207,19 @@ def collect_food_messages(updates: list) -> list:
 
     return food_messages
 
-def analyze_food(food_text: str) -> dict:
+def analyze_food(food_text: str, sport_kcal: int = 0, sport_omschrijving: str = "") -> dict:
     recipes = load_recipes()
     recipe_context = get_recipe_context(food_text, recipes)
+
+    sport_context = ""
+    if sport_kcal > 0:
+        dag_doel = dagdoel(DOEL_KCAL, SPORT_COMPENSATIE, sport_kcal)
+        sport_context = (
+            f"\n\nSport vandaag (exact gemeten via Garmin): {sport_omschrijving} — {sport_kcal} kcal verbrand. "
+            f"Het caloriedoel van vandaag is daarom {dag_doel} kcal "
+            f"({DOEL_KCAL} + {dag_doel - DOEL_KCAL} sportcompensatie). "
+            f"Gebruik {dag_doel} kcal als calorie-referentie voor de score en de notitie."
+        )
 
     prompt = f"""Je bent een voedingsdeskundige. Analyseer de onderstaande maaltijdbeschrijving.
 Gebruik typische Belgische portiegroottes. Wees realistisch, niet optimistisch.
@@ -219,7 +232,7 @@ Dagelijkse doelen van deze persoon:
 - Vezels: {DOEL_VEZEL}g
 - Richting: {RICHTING_TEKST}
 
-Gebruik deze doelen én de richting als referentie voor de score (1–10) en de notitie. Een score van 10 = doelen perfect behaald.{recipe_context}
+Gebruik deze doelen én de richting als referentie voor de score (1–10) en de notitie. Een score van 10 = doelen perfect behaald.{sport_context}{recipe_context}
 
 Maaltijden van vandaag (meerdere berichten, chronologisch):
 {food_text}
@@ -289,14 +302,14 @@ def streak_tekst(streak: int) -> str:
         emoji = "⚡"
     return f"{emoji} *{streak} dagen op rij maaltijden gelogd!*"
 
-def stuur_score_alert(food_text: str, score: int) -> None:
+def stuur_score_alert(food_text: str, score: int, sport_context: str = "") -> None:
     """Stuurt een extra gerichte tip als de dagelijkse score onder 5 valt."""
     try:
         resp = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": (
                 f"Maaltijden van vandaag (score {score}/10):\n{food_text}\n\n"
-                f"Doel-richting: {RICHTING_TEKST}.\n"
+                f"Doel-richting: {RICHTING_TEKST}.{sport_context}\n"
                 "Geef één concrete, budgetvriendelijke tip om de voedingskwaliteit morgen te verbeteren. "
                 "Max 2 zinnen, Nederlands, direct en praktisch. Geen aanhef."
             )}],
@@ -314,6 +327,27 @@ def save_to_sheets(payload: dict) -> bool:
         resp = requests.get(resp.headers.get("Location", ""), timeout=15)
     return resp.ok
 
+def fetch_sport_today(today: str):
+    """Haalt activiteiten van vandaag + gisteren op (gisteren = vangnet voor late syncs)
+    en logt ze allemaal in de Sport-tab (dedupe op Intervals ID gebeurt in Apps Script).
+    Geeft (activiteiten_vandaag, sport_kcal_vandaag) terug. Faalt stil."""
+    gisteren = (
+        datetime.datetime.strptime(today, "%Y-%m-%d") - datetime.timedelta(days=1)
+    ).strftime("%Y-%m-%d")
+
+    alle_acts = activiteiten_tussen(gisteren, today)
+    if alle_acts:
+        try:
+            if save_to_sheets({"type": "sport", "activiteiten": alle_acts}):
+                print(f"Sport: {len(alle_acts)} activiteit(en) naar de Sport-tab gestuurd")
+            else:
+                print("Sport: opslaan in Sport-tab mislukt")
+        except Exception as e:
+            print(f"Sport: opslaan in Sport-tab mislukt: {e}")
+
+    vandaag_acts = [a for a in alle_acts if a["datum"] == today]
+    return vandaag_acts, sport_kcal_totaal(vandaag_acts)
+
 def main() -> None:
     today   = datetime.datetime.now(BRUSSELS).strftime("%Y-%m-%d")
     updates = get_updates()
@@ -321,6 +355,11 @@ def main() -> None:
     food_messages = collect_food_messages(updates)
     late_weight   = find_today_weight(updates)
     clear_updates(updates)
+
+    # Sport altijd ophalen en loggen, óók als er geen maaltijden zijn
+    sport_acts, sport_kcal = fetch_sport_today(today)
+    dag_doel = dagdoel(DOEL_KCAL, SPORT_COMPENSATIE, sport_kcal)
+    sport_samenvatting = sport_regel(sport_acts)
 
     weight_note = ""
     if late_weight is not None and not weight_already_saved_today(today):
@@ -332,6 +371,11 @@ def main() -> None:
 
     if not food_messages:
         msg = "😔 Geen maaltijden gevonden voor vandaag. Vergeet morgen niet te loggen!"
+        if sport_kcal > 0:
+            msg += (
+                f"\n\n🚴 Wel gesport: *{sport_kcal} kcal* verbrand ({sport_samenvatting}) "
+                f"— opgeslagen in de Sport-tab."
+            )
         if weight_note:
             msg += f"\n\n{weight_note}"
         send_message(msg)
@@ -339,11 +383,13 @@ def main() -> None:
 
     food_text = "\n".join(food_messages)
     print(f"Maaltijdberichten gevonden: {len(food_messages)}\n{food_text}")
+    if sport_kcal > 0:
+        print(f"Sport vandaag: {sport_kcal} kcal ({sport_samenvatting}) → dagdoel {dag_doel} kcal")
 
     send_message("⏳ Even analyseren…")
 
     try:
-        data = analyze_food(food_text)
+        data = analyze_food(food_text, sport_kcal, sport_samenvatting)
     except Exception as e:
         print(f"Analyse-fout: {e}")
         send_message("❌ Analyse mislukt. Probeer morgen opnieuw of beschrijf je maaltijden wat duidelijker.")
@@ -365,9 +411,17 @@ def main() -> None:
                 line += f" — _{omschr}_"
             meal_lines += line + "\n"
 
+    sport_blok = ""
+    if sport_kcal > 0:
+        sport_blok = (
+            f"🚴 Sport: *{sport_kcal} kcal* verbrand — _{sport_samenvatting}_\n"
+            f"🎯 Dagdoel: {DOEL_KCAL} + {dag_doel - DOEL_KCAL} = *{dag_doel} kcal*\n"
+        )
+
     send_message(
         f"📊 *Voedingsoverzicht — {today}*\n\n"
-        f"{meal_lines}\n"
+        f"{meal_lines}"
+        f"{sport_blok}\n"
         f"━━━━━━━━━━━━━━\n"
         f"🔥 Totaal: *{data['calories']} kcal*\n"
         f"💪 Eiwitten: {data['eiwitten']} g\n"
@@ -384,7 +438,11 @@ def main() -> None:
     snacks  = data.get("snacks", {})
 
     if data['score'] < 5:
-        stuur_score_alert(food_text, data['score'])
+        sport_alert_context = (
+            f"\nVandaag {sport_kcal} kcal gesport — dagbudget was {dag_doel} kcal."
+            if sport_kcal > 0 else ""
+        )
+        stuur_score_alert(food_text, data['score'], sport_alert_context)
 
     streak = calculate_streak("maaltijden")
 
@@ -402,6 +460,7 @@ def main() -> None:
         "lunch_kcal":     lunch.get("kcal", 0),
         "avondeten_kcal": avond.get("kcal", 0),
         "snacks_kcal":    snacks.get("kcal", 0),
+        "sport_kcal":     sport_kcal,
     }):
         msg = "✅ Opgeslagen in je Google Spreadsheet!"
         tekst = streak_tekst(streak)

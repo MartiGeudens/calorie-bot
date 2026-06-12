@@ -7,6 +7,8 @@ import requests
 import pytz
 from groq import Groq
 
+from intervals import activiteiten_van, sport_kcal_totaal, sport_regel, dagdoel
+
 BOT_TOKEN    = os.environ["BOT_TOKEN"]
 CHAT_ID      = int(os.environ["CHAT_ID"])
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
@@ -26,6 +28,7 @@ DOEL_EIWIT = _cfg["eiwitten"]
 DOEL_KOOLH = _cfg["koolhydraten"]
 DOEL_VET   = _cfg["vetten"]
 DOEL_VEZEL = _cfg["vezels"]
+SPORT_COMPENSATIE = float(_cfg.get("sport_compensatie", 1.0))
 RICHTING_TEKST = {
     "aankomen":    "aankomen — een calorie-surplus en voldoende eiwit zijn gewenst; het resterende budget mag zeker opgegeten worden",
     "afvallen":    "afvallen — een calorie-tekort is gewenst",
@@ -129,10 +132,19 @@ def collect_today_food(updates: list) -> list:
 
     return food_messages
 
-def analyze_partial_day(food_text: str) -> dict:
+def analyze_partial_day(food_text: str, sport_kcal: int = 0, sport_omschrijving: str = "") -> dict:
     recipes = load_recipes()
     recipe_context = get_recipe_context(food_text, recipes)
     now = datetime.datetime.now(BRUSSELS)
+
+    sport_context = ""
+    if sport_kcal > 0:
+        dag_doel = dagdoel(DOEL_KCAL, SPORT_COMPENSATIE, sport_kcal)
+        sport_context = (
+            f"\nSport vandaag (exact gemeten via Garmin): {sport_omschrijving} — {sport_kcal} kcal verbrand. "
+            f"Het caloriedoel van vandaag is daarom {dag_doel} kcal in plaats van {DOEL_KCAL} kcal; "
+            f"gebruik {dag_doel} kcal als budget voor je aanbevelingen."
+        )
 
     prompt = f"""Je bent een voedingsdeskundige. Analyseer de maaltijden van vandaag tot nu toe en geef concrete tips voor de rest van de dag.
 Gebruik typische Belgische portiegroottes.
@@ -145,7 +157,7 @@ Dagelijkse doelen van deze persoon:
 - Vetten: {DOEL_VET}g
 - Vezels: {DOEL_VEZEL}g
 - Richting: {RICHTING_TEKST}
-{recipe_context}
+{sport_context}{recipe_context}
 
 Maaltijden tot nu toe:
 {food_text}
@@ -191,12 +203,23 @@ def main() -> None:
     max_tips_id = max(u["update_id"] for u in tips_updates)
     food_messages = collect_today_food(updates)
 
+    today      = datetime.datetime.now(BRUSSELS).strftime("%Y-%m-%d")
+    sport_acts = activiteiten_van(today)
+    sport_kcal = sport_kcal_totaal(sport_acts)
+    dag_doel   = dagdoel(DOEL_KCAL, SPORT_COMPENSATIE, sport_kcal)
+
     if not food_messages:
-        send_message(
+        msg = (
             "📊 *Calorie Tips*\n\n"
             "Je hebt nog niets gelogd voor vandaag.\n\n"
             "Stuur je maaltijden als gewone berichten en gebruik daarna /tips om je caloriëbudget te bekijken."
         )
+        if sport_kcal > 0:
+            msg += (
+                f"\n\n🚴 Al wel gesport: *{sport_kcal} kcal* verbrand ({sport_regel(sport_acts)}) "
+                f"— je dagbudget is daardoor *{dag_doel} kcal*."
+            )
+        send_message(msg)
         save_last_tips_id(max_tips_id)
         commit_tips_file()
         return
@@ -205,9 +228,11 @@ def main() -> None:
 
     food_text = "\n".join(food_messages)
     print(f"Maaltijdberichten voor tips ({len(food_messages)}):\n{food_text}")
+    if sport_kcal > 0:
+        print(f"Sport vandaag: {sport_kcal} kcal → dagbudget {dag_doel} kcal")
 
     try:
-        data = analyze_partial_day(food_text)
+        data = analyze_partial_day(food_text, sport_kcal, sport_regel(sport_acts))
     except Exception as e:
         print(f"Tips analyse mislukt: {e}")
         send_message("❌ Kon tips niet berekenen. Probeer opnieuw.")
@@ -223,7 +248,7 @@ def main() -> None:
     samen     = data.get("maaltijden_samenvatting", "")
     tips_list = data.get("aanbevelingen", [])
 
-    rest_kcal  = DOEL_KCAL  - kcal
+    rest_kcal  = dag_doel   - kcal
     rest_eiwit = DOEL_EIWIT - eiwitten
     rest_koolh = DOEL_KOOLH - koolh
     rest_vet   = DOEL_VET   - vetten
@@ -237,15 +262,23 @@ def main() -> None:
         return f"{teken} {label}: {gegeten}/{doel}{eenheid} ({pct}%)"
 
     if rest_kcal > 0:
-        budget_lijn = f"✅ Nog *{rest_kcal} kcal* over van je {DOEL_KCAL} kcal doel"
+        budget_lijn = f"✅ Nog *{rest_kcal} kcal* over van je {dag_doel} kcal doel"
     else:
-        budget_lijn = f"⚠️ Je zit *{abs(rest_kcal)} kcal boven* je {DOEL_KCAL} kcal doel"
+        budget_lijn = f"⚠️ Je zit *{abs(rest_kcal)} kcal boven* je {dag_doel} kcal doel"
+
+    sport_lijn = ""
+    if sport_kcal > 0:
+        sport_lijn = (
+            f"🚴 {sport_regel(sport_acts)} — *{sport_kcal} kcal* verbrand "
+            f"(doel: {DOEL_KCAL} + {dag_doel - DOEL_KCAL})\n"
+        )
 
     tips_tekst = "\n".join(f"• {t}" for t in tips_list) if tips_list else "Geen specifieke aanbevelingen."
 
     message = (
         f"*Calorie Tips — {now.strftime('%H:%M')}*\n\n"
         f"_{samen}_\n\n"
+        f"{sport_lijn}"
         f"{budget_lijn}\n\n"
         f"*Macro's tot nu toe:*\n"
         f"{macro_lijn('Eiwitten', eiwitten, DOEL_EIWIT)}\n"

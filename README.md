@@ -5,8 +5,8 @@ Persoonlijke Telegram-bot die maaltijden logt, macro's analyseert via AI en alle
 ## Architectuur
 
 ```
-Telegram Bot
-    ↕
+Telegram Bot                     Garmin → intervals.icu (sport-kcal)
+    ↕                                ↓ API-key
 GitHub Actions  →  Groq AI (llama-3.3-70b-versatile)
     ↓
 Google Sheets  ←→  Apps Script Web App (doPost/doGet met API-key)
@@ -37,6 +37,9 @@ Elke maandag om 08:00: gemiddelden per macro, vergelijking met je doelen en vori
 ### Maandrapport
 Op de 1e van de maand: een foto met 4 grafieken (gewicht + trend, kcal/dag vs. doel, eiwit/dag, maaltijdverdeling per week) plus samenvatting, TDEE en AI-reflectie.
 
+### Sport-integratie (Garmin → intervals.icu)
+Sportactiviteiten worden automatisch uitgelezen via de gratis [intervals.icu](https://intervals.icu) API met **exacte kcal uit je Garmin-meting** — geen AI-schatting. Elke activiteit komt in de Sport-tab, en het dagbudget stijgt mee: *doel + sport_compensatie × verbrande kcal* (een rit van 600 kcal maakt van 2750 dus 3350). De 23:58-analyse, /tips en de slimme herinnering rekenen er allemaal mee; de TDEE-schatting blijft bewust ongemoeid (sport zit daar al impliciet in). Valt intervals.icu weg, dan werkt alles gewoon zonder sportregel. Setup: [docs/intervals.md](docs/intervals.md).
+
 ### Recepten
 Voeg recepten toe via `/recept_ai` (AI berekent macro's) of `/recept` (eigen macro's opgeven). Recepten worden automatisch herkend in maaltijdlogs voor exacte berekeningen in plaats van AI-schattingen. Beschikbaar via het receptenboek op GitHub Pages.
 
@@ -55,12 +58,15 @@ Macrodoelen en doel-richting worden centraal beheerd in `data/config/config.json
     "koolhydraten": 320,
     "vetten": 85,
     "vezels": 30,
-    "richting": "aankomen"
+    "richting": "aankomen",
+    "sport_compensatie": 1.0
   }
 }
 ```
 
 `richting` is `aankomen`, `afvallen` of `onderhouden` — alle AI-feedback (scores, tips, reflecties) houdt er rekening mee.
+
+`sport_compensatie` bepaalt hoeveel van de verbrande sport-kcal bij het dagdoel komt: `1.0` = alles terug-eten (logisch bij aankomen), `0.5` = halve compensatie als buffer tegen overschatting (gangbaar bij afvallen).
 
 ## Dagelijkse flow
 
@@ -88,7 +94,8 @@ Volg de stappen in volgorde:
 5. **GitHub Pages**: Settings → Pages → Source: *GitHub Actions* (de `pages.yaml` workflow deployt bij elke push)
 6. [cron-job.org](docs/cronjob.md) — GitHub PAT, job-URL's en tijdsinstellingen
 7. [Dashboard](docs/dashboard.md) — eenmalig URL + key invullen
-8. **Testen**: run elke workflow één keer handmatig via Actions → *Run workflow*. Het maandrapport heeft een `test_mode`-optie voor een direct rapport over de lopende maand.
+8. [intervals.icu](docs/intervals.md) *(optioneel)* — sport-integratie met Garmin: account, Garmin-sync en `INTERVALS_API_KEY`
+9. **Testen**: run elke workflow één keer handmatig via Actions → *Run workflow*. Het maandrapport heeft een `test_mode`-optie voor een direct rapport over de lopende maand.
 
 De bot reageert uitsluitend op jouw `CHAT_ID` — anderen die je bot vinden kunnen er niets mee.
 
@@ -102,6 +109,7 @@ De bot reageert uitsluitend op jouw `CHAT_ID` — anderen die je bot vinden kunn
 | AI | Groq API | gratis tier |
 | Opslag | Google Sheets + Apps Script | gratis |
 | Website + dashboard | GitHub Pages | gratis |
+| Sport-data | intervals.icu API (Garmin-sync) | gratis |
 
 ## Goed om te weten
 

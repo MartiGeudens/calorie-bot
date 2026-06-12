@@ -20,6 +20,14 @@ function exportNaarDoc() {
     body.appendParagraph(maaltijden.slice(-31).map(r => r.join(" | ")).join("\n"));
   }
 
+  // Sport — laatste 60 activiteiten
+  var sportSheet = ss.getSheetByName("Sport");
+  var sport = sportSheet ? sportSheet.getDataRange().getValues() : [];
+  body.appendParagraph("SPORT").setHeading(DocumentApp.ParagraphHeading.HEADING1);
+  if (sport.length > 0) {
+    body.appendParagraph(sport.slice(-60).map(r => r.join(" | ")).join("\n"));
+  }
+
   doc.saveAndClose();
 }
 
@@ -37,6 +45,39 @@ function doPost(e) {
       }
       sheet.appendRow([data.datum, data.gewicht]);
 
+    } else if (data.type === "sport") {
+      // 1 rij per activiteit, dedupe op Intervals ID (kolom 8) — dezelfde
+      // activiteit kan meermaals binnenkomen (vandaag + gisteren-vangnet).
+      var sheet = ss.getSheetByName("Sport");
+      if (!sheet) {
+        sheet = ss.insertSheet("Sport");
+        sheet.appendRow(["Datum", "Activiteit", "Type", "Duur (min)", "Afstand (km)", "Kcal", "Gem. HS", "Intervals ID"]);
+      }
+      var bestaande = {};
+      var lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        sheet.getRange(2, 8, lastRow - 1, 1).getValues().forEach(function(r) {
+          if (r[0] !== "") bestaande[String(r[0])] = true;
+        });
+      }
+      var nieuw = 0;
+      (data.activiteiten || []).forEach(function(a) {
+        if (!a || !a.id || bestaande[String(a.id)]) return;
+        sheet.appendRow([
+          a.datum      || "",
+          a.naam       || "",
+          a.type       || "",
+          a.duur_min   || 0,
+          a.afstand_km || 0,
+          a.kcal       || 0,
+          a.gem_hs     || 0,
+          String(a.id)
+        ]);
+        bestaande[String(a.id)] = true;
+        nieuw++;
+      });
+      return jsonResponse({ status: "ok", nieuw: nieuw });
+
     } else {
       var sheet = ss.getSheetByName("Maaltijden") || ss.getActiveSheet();
       sheet.appendRow([
@@ -52,7 +93,8 @@ function doPost(e) {
         data.ontbijt_kcal       !== undefined ? data.ontbijt_kcal   : "",
         data.lunch_kcal         !== undefined ? data.lunch_kcal     : "",
         data.avondeten_kcal     !== undefined ? data.avondeten_kcal : "",
-        data.snacks_kcal        !== undefined ? data.snacks_kcal    : ""
+        data.snacks_kcal        !== undefined ? data.snacks_kcal    : "",
+        data.sport_kcal         !== undefined ? data.sport_kcal     : ""
       ]);
     }
 
@@ -108,7 +150,32 @@ function doGet(e) {
           ontbijt_kcal:   row[9]  || 0,
           lunch_kcal:     row[10] || 0,
           avondeten_kcal: row[11] || 0,
-          snacks_kcal:    row[12] || 0
+          snacks_kcal:    row[12] || 0,
+          sport_kcal:     row[13] || 0
+        };
+      });
+      return jsonResponse(result);
+
+    } else if (type === "sport") {
+      var sheet = ss.getSheetByName("Sport");
+      if (!sheet) return jsonResponse([]);
+      var allData = sheet.getDataRange().getValues();
+      if (allData.length <= 1) return jsonResponse([]);
+      var rows = allData.slice(1).slice(-limit);
+      var result = rows.map(function(row) {
+        var datumVal = row[0];
+        var datumStr = datumVal instanceof Date
+          ? Utilities.formatDate(datumVal, "Europe/Brussels", "yyyy-MM-dd")
+          : (datumVal ? datumVal.toString() : "");
+        return {
+          datum:      datumStr,
+          naam:       row[1] || "",
+          type:       row[2] || "",
+          duur_min:   row[3] || 0,
+          afstand_km: row[4] || 0,
+          kcal:       row[5] || 0,
+          gem_hs:     row[6] || 0,
+          id:         String(row[7] || "")
         };
       });
       return jsonResponse(result);
@@ -156,5 +223,17 @@ function testMaaltijd() {
 function testGewicht() {
   doPost({ postData: { contents: JSON.stringify({
     type: "gewicht", datum: "2026-06-01", gewicht: 72.5
+  })}});
+}
+
+function testSport() {
+  doPost({ postData: { contents: JSON.stringify({
+    type: "sport",
+    activiteiten: [
+      { id: "i1234567", datum: "2026-06-11", naam: "Avondrit", type: "Ride",
+        duur_min: 92, afstand_km: 45.2, kcal: 612, gem_hs: 148 },
+      { id: "i1234568", datum: "2026-06-11", naam: "Looprondje", type: "Run",
+        duur_min: 31, afstand_km: 6.1, kcal: 285, gem_hs: 156 }
+    ]
   })}});
 }

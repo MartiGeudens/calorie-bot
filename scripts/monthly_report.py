@@ -35,6 +35,7 @@ def load_doelen() -> dict:
 _doelen    = load_doelen()
 DOEL_KCAL  = _doelen["kcal"]
 DOEL_EIWIT = _doelen["eiwitten"]
+SPORT_COMPENSATIE = float(_doelen.get("sport_compensatie", 1.0))
 RICHTING_TEKST = {
     "aankomen":    "aankomen — een calorie-surplus en voldoende eiwit zijn gewenst; gewichtsverlies is hier juist ongewenst",
     "afvallen":    "afvallen — een calorie-tekort is gewenst",
@@ -123,7 +124,9 @@ def maand_bereik(today: datetime.date):
     return eerste, laatste, f"{MAANDEN[eerste.month - 1]} {eerste.year}"
 
 # ── Grafieken ─────────────────────────────────────────────────────────────────
-def maak_grafiek(rows: list, wbd: dict, eerste: datetime.date, laatste: datetime.date, titel: str) -> bytes:
+def maak_grafiek(rows: list, wbd: dict, eerste: datetime.date, laatste: datetime.date,
+                 titel: str, sport_by_day: dict = None) -> bytes:
+    sport_by_day = sport_by_day or {}
     fig, axes = plt.subplots(2, 2, figsize=(11, 8.5))
     fig.suptitle(f"Maandrapport — {titel}", fontsize=14, fontweight="bold")
 
@@ -148,10 +151,18 @@ def maak_grafiek(rows: list, wbd: dict, eerste: datetime.date, laatste: datetime
         ax.text(0.5, 0.5, "geen wegingen", ha="center", va="center", transform=ax.transAxes, color="#888")
     ax.set_title("Gewicht (kg)", fontsize=10)
 
-    # 2. Calorieën per dag vs. doel
+    # 2. Calorieën per dag vs. doel (dynamisch doel op sportdagen)
     ax = axes[0][1]
-    kleuren = ["#c95f5f" if k > DOEL_KCAL else "#4c9a6e" for k in kcals]
+    kleuren = [
+        "#c95f5f" if r["kcal"] > DOEL_KCAL + SPORT_COMPENSATIE * sport_by_day.get(r["datum"], 0)
+        else "#4c9a6e"
+        for r in rows
+    ]
     ax.bar(dagen, kcals, color=kleuren)
+    sport_dgn = sorted(d for d, k in sport_by_day.items() if eerste <= d <= laatste and k > 0)
+    if sport_dgn:
+        ax.bar([d.day for d in sport_dgn], [sport_by_day[d] for d in sport_dgn],
+               width=0.45, color="#7e6bb5", alpha=0.85, label="sport (verbrand)")
     ax.axhline(DOEL_KCAL, color="#111", linestyle="--", linewidth=1.5, label=f"doel {DOEL_KCAL}")
     ax.legend(fontsize=8)
     ax.set_title("Calorieën per dag", fontsize=10)
@@ -241,6 +252,7 @@ def main() -> None:
 
     maaltijden_raw = fetch_data("maaltijden", 70)
     gewichten_raw  = fetch_data("gewicht", 70)
+    sport_raw      = fetch_data("sport", 200)
 
     if not maaltijden_raw:
         if UNAUTHORIZED:
@@ -286,6 +298,18 @@ def main() -> None:
         if d and g > 0:
             wbd[d] = g
 
+    # sport: kcal per dag + statistieken voor deze maand
+    sport_by_day: dict = {}
+    sport_acts = 0
+    for r in sport_raw:
+        if not isinstance(r, dict):
+            continue
+        d = parse_date(r.get("datum", ""))
+        k = safe_num(r.get("kcal"))
+        if d and eerste <= d <= laatste:
+            sport_by_day[d] = sport_by_day.get(d, 0) + k
+            sport_acts += 1
+
     if len(rows) < 5:
         send_message(
             f"📅 *Maandrapport {titel}*\n\n"
@@ -324,10 +348,21 @@ def main() -> None:
 
     tdee_lijn = tdee_schatting(rows, wbd, eerste, laatste)
 
+    sport_lijn = ""
+    sport_ai   = ""
+    if sport_by_day:
+        sport_tot = int(sum(sport_by_day.values()))
+        sport_lijn = (
+            f"🚴 {sport_acts} activiteit{'en' if sport_acts != 1 else ''} op "
+            f"{len(sport_by_day)} dag{'en' if len(sport_by_day) != 1 else ''} — "
+            f"{sport_tot} kcal verbrand\n"
+        )
+        sport_ai = f", sport: {sport_tot} kcal verbrand op {len(sport_by_day)} dagen"
+
     reflectie = groq_reflectie(
         f"{titel}: {len(rows)}/{dagen_in_maand} dagen gelogd, gem. {avg_kcal} kcal "
         f"(doel {DOEL_KCAL}), gem. {avg_eiwit}g eiwit (doel {DOEL_EIWIT}g), "
-        f"score {avg_score}/10, gewicht: {gewicht_lijn}"
+        f"score {avg_score}/10, gewicht: {gewicht_lijn}{sport_ai}"
     )
 
     caption = (
@@ -336,6 +371,7 @@ def main() -> None:
         f"🔥 Gem. {avg_kcal} kcal/dag (doel {DOEL_KCAL})\n"
         f"💪 Gem. {avg_eiwit}g eiwit/dag (doel {DOEL_EIWIT}g)\n"
         f"⭐ Gem. score: {avg_score}/10\n"
+        f"{sport_lijn}"
         f"{gewicht_lijn}\n"
         f"{beste_lijn}"
         f"{tdee_lijn}"
@@ -343,7 +379,7 @@ def main() -> None:
     if reflectie:
         caption += f"\n\n💬 _{reflectie[:280]}_"
 
-    png = maak_grafiek(rows, wbd, eerste, laatste, titel)
+    png = maak_grafiek(rows, wbd, eerste, laatste, titel, sport_by_day)
 
     if not send_photo(png, caption):
         # vangnet: stuur minstens de tekst

@@ -23,3 +23,5 @@ jobs:
           CHAT_ID:         ${{ secrets.CHAT_ID }}
           APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
           APPS_SCRIPT_KEY: ${{ secrets.APPS_SCRIPT_KEY }}
+          # Fase 1: ongebruikt; voorbereid voor fase 3 (gewicht-upload naar intervals.icu)
+          INTERVALS_API_KEY: ${{ secrets.INTERVALS_API_KEY }}

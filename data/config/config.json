@@ -5,6 +5,7 @@
     "koolhydraten": 320,
     "vetten": 85,
     "vezels": 30,
-    "richting": "aankomen"
+    "richting": "aankomen",
+    "sport_compensatie": 1.0
   }
 }

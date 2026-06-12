@@ -194,6 +194,7 @@ const LS_KEY = "cb_api_key";
 
 let alleMaaltijden = [];   // [{datum: Date, kcal, eiwit, koolh, vet, vezel, score, ontbijt, lunch, avond, snacks}]
 let alleGewichten  = {};   // {"YYYY-MM-DD": kg}
+let alleSport      = {};   // {"YYYY-MM-DD": verbrande kcal (som van activiteiten)}
 let doelen         = { kcal: 2750, eiwitten: 150 };  // fallback; echte waarden uit config.json
 let periodeDagen   = 30;
 const charts       = {};
@@ -247,9 +248,11 @@ async function laadData() {
       if (cfg && cfg.doelen) doelen = cfg.doelen;
     } catch (e) { /* fallback-doelen blijven staan */ }
 
-    const [maaltijden, gewichten] = await Promise.all([
+    const [maaltijden, gewichten, sport] = await Promise.all([
       fetchType(url, key, "maaltijden"),
       fetchType(url, key, "gewicht"),
+      // oudere Apps Script-versie zonder sport-type → dashboard blijft werken
+      fetchType(url, key, "sport").catch(() => []),
     ]);
 
     alleMaaltijden = maaltijden
@@ -265,6 +268,12 @@ async function laadData() {
     for (const r of gewichten) {
       const d = parseDatum(r.datum), g = num(r.gewicht);
       if (d && g > 0) alleGewichten[isoDag(d)] = g;
+    }
+
+    alleSport = {};
+    for (const r of sport) {
+      const d = parseDatum(r.datum), k = num(r.kcal);
+      if (d && k > 0) alleSport[isoDag(d)] = (alleSport[isoDag(d)] || 0) + k;
     }
 
     toonDashboard();
@@ -317,6 +326,25 @@ const basisOpties = {
             y: { ticks: { font: { size: 10 } } } },
 };
 
+// Tekent 🚴 boven de kcal-staaf op sportdagen (geregistreerd op enkel de kcal-grafiek)
+const sportMarkerPlugin = {
+  id: "sportMarkers",
+  afterDatasetsDraw(chart) {
+    const perBar = (chart.config.options || {}).sportKcalPerBar || [];
+    const meta = chart.getDatasetMeta(0);
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.font = "11px sans-serif";
+    ctx.textAlign = "center";
+    perBar.forEach((s, i) => {
+      const bar = meta.data[i];
+      if (!s || !bar) return;
+      ctx.fillText("🚴", bar.x, Math.max(bar.y - 5, chart.chartArea.top + 10));
+    });
+    ctx.restore();
+  },
+};
+
 function render() {
   const nu      = new Date();
   const vanaf   = new Date(nu.getTime() - periodeDagen * dagMs);
@@ -359,15 +387,29 @@ function render() {
     options: { ...basisOpties, plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 10 } } } } },
   });
 
-  // ── kcal per dag
+  // ── kcal per dag — doellijn stijgt op sportdagen (doel + compensatie × sport-kcal)
+  const comp = doelen.sport_compensatie !== undefined ? num(doelen.sport_compensatie) : 1;
+  const sportVan = r => (r && r.datum) ? (alleSport[isoDag(r.datum)] || 0) : 0;
+  const dagDoelen = rows.map(r => Math.round(doelen.kcal + comp * sportVan(r)));
+
   maakChart("chartKcal", {
     type: "bar",
     data: { labels, datasets: [
       { data: rows.map(r => r.kcal),
-        backgroundColor: rows.map(r => r.kcal > doelen.kcal ? "rgba(201,95,95,0.75)" : "rgba(76,154,110,0.75)") },
-      doelLijn(labels, doelen.kcal, "#111"),
+        backgroundColor: rows.map((r, i) => r.kcal > dagDoelen[i] ? "rgba(201,95,95,0.75)" : "rgba(76,154,110,0.75)") },
+      { type: "line", label: "Doel", data: dagDoelen,
+        borderColor: "#111", borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, fill: false },
     ]},
-    options: basisOpties,
+    options: { ...basisOpties,
+      sportKcalPerBar: rows.map(sportVan),
+      plugins: { legend: { display: false }, tooltip: { callbacks: {
+        footer: items => {
+          const i = items[0].dataIndex;
+          const s = sportVan(rows[i] || {});
+          return s ? `🚴 ${Math.round(s)} kcal sport → doel ${dagDoelen[i]}` : "";
+        },
+      }}}},
+    plugins: [sportMarkerPlugin],
   });
 
   // ── eiwit per dag

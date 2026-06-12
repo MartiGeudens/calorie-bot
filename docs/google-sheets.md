@@ -15,9 +15,9 @@
 
 Rename the default sheet to `Maaltijden` and add these headers in row 1:
 
-| A | B | C | D | E | F | G | H | I | J | K | L | M |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Datum | Maaltijden | Calorieën | Eiwitten (g) | Koolhydraten (g) | Vetten (g) | Vezels (g) | Score | Notities | Ontbijt (kcal) | Lunch (kcal) | Avondeten (kcal) | Snacks (kcal) |
+| A | B | C | D | E | F | G | H | I | J | K | L | M | N |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Datum | Maaltijden | Calorieën | Eiwitten (g) | Koolhydraten (g) | Vetten (g) | Vezels (g) | Score | Notities | Ontbijt (kcal) | Lunch (kcal) | Avondeten (kcal) | Snacks (kcal) | Sport (kcal) |
 
 ### Tab: Gewicht
 
@@ -26,6 +26,14 @@ Add a second sheet named `Gewicht` with headers in row 1:
 | A | B |
 |---|---|
 | Datum | Gewicht (kg) |
+
+### Tab: Sport
+
+Created **automatically** by Apps Script when the first activity arrives (see [intervals.md](intervals.md)). To create it manually, add a sheet named `Sport` with headers in row 1:
+
+| A | B | C | D | E | F | G | H |
+|---|---|---|---|---|---|---|---|
+| Datum | Activiteit | Type | Duur (min) | Afstand (km) | Kcal | Gem. HS | Intervals ID |
 
 ## 3. Set up Apps Script
 
@@ -38,7 +46,7 @@ The script contains:
 - `doPost(e)` — receives data from GitHub Actions and appends rows
 - `doGet(e)` — returns the last N rows as JSON (used by the weekly/monthly reports, streak checks and the stats dashboard). Protected by an API key.
 - `exportNaarDoc()` — optional daily export to a Google Doc
-- `testMaaltijd()` / `testGewicht()` — run these from the editor to verify the sheet wiring
+- `testMaaltijd()` / `testGewicht()` / `testSport()` — run these from the editor to verify the sheet wiring
 
 ## 4. Set the API key
 
@@ -93,4 +101,4 @@ If you want data synced to a Google Doc for use in Claude:
 ## Notes
 
 - **Updating the script later?** Always use **Deploy > Manage deployments > Edit (✏️) > Version: New** — this keeps the URL stable. Creating a *new deployment* generates a new URL and breaks everything pointing at the old one (GitHub secret, dashboard).
-- The `Gewicht` tab is created automatically on the first weight entry if it doesn't exist.
+- The `Gewicht` and `Sport` tabs are created automatically on the first entry if they don't exist.

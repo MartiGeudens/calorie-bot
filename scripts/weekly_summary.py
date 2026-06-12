@@ -26,6 +26,7 @@ DOEL_EIWIT = _cfg["eiwitten"]
 DOEL_KOOLH = _cfg["koolhydraten"]
 DOEL_VET   = _cfg["vetten"]
 DOEL_VEZEL = _cfg["vezels"]
+SPORT_COMPENSATIE = float(_cfg.get("sport_compensatie", 1.0))
 RICHTING_TEKST = {
     "aankomen":    "aankomen — een calorie-surplus en voldoende eiwit zijn gewenst; te weinig eten is hier het probleem, niet te veel",
     "afvallen":    "afvallen — een calorie-tekort is gewenst",
@@ -194,6 +195,7 @@ def main() -> None:
 
     maaltijden = fetch_data("maaltijden", 25)
     gewichten  = fetch_data("gewicht", 25)
+    sport_rows = fetch_data("sport", 100)  # 1 rij per activiteit
 
     if not maaltijden:
         if UNAUTHORIZED:
@@ -212,6 +214,29 @@ def main() -> None:
     prev_week = maaltijden[-14:-7] if len(maaltijden) >= 14 else []
 
     logged_days = len(this_week)
+
+    # ── Sport deze week (afgelopen 7 dagen t.e.m. gisteren; run = maandagochtend)
+    week_start = now.date() - datetime.timedelta(days=7)
+    sport_by_date: dict = {}
+    sport_week = []
+    for r in sport_rows:
+        if not isinstance(r, dict):
+            continue
+        d = parse_date(r.get("datum", ""))
+        k = safe_num(r.get("kcal"))
+        if not d:
+            continue
+        sport_by_date[d] = sport_by_date.get(d, 0) + k
+        if week_start <= d < now.date():
+            sport_week.append((d, k))
+
+    # Gemiddeld dynamisch dagdoel over de gelogde dagen (doel + compensatie × sport)
+    dyn_doelen = []
+    for r in this_week:
+        d = parse_date(r.get("datum", "")) if isinstance(r, dict) else None
+        sport_kcal_dag = sport_by_date.get(d, 0) if d else 0
+        dyn_doelen.append(DOEL_KCAL + SPORT_COMPENSATIE * sport_kcal_dag)
+    gem_dag_doel = round(sum(dyn_doelen) / len(dyn_doelen)) if dyn_doelen else DOEL_KCAL
 
     avg_cal   = week_avg(this_week, "calories")
     avg_eiwit = week_avg(this_week, "eiwitten")
@@ -269,9 +294,24 @@ def main() -> None:
             return "✅ op doel"
         return f"{'↑' if diff > 0 else '↓'} {abs(int(diff))} {'te veel' if diff > 0 else 'te weinig'}"
 
+    sport_blok = ""
+    if sport_week:
+        sport_dagen = len({d for d, _ in sport_week})
+        sport_tot   = int(sum(k for _, k in sport_week))
+        sport_blok = (
+            f"\n🚴 *Sport deze week:*\n"
+            f"  {len(sport_week)} activiteit{'en' if len(sport_week) != 1 else ''} "
+            f"op {sport_dagen} dag{'en' if sport_dagen != 1 else ''} — "
+            f"{sport_tot} kcal verbrand\n"
+        )
+
+    doel_lijn_kcal = f"{DOEL_KCAL} kcal"
+    if gem_dag_doel != DOEL_KCAL:
+        doel_lijn_kcal = f"gem. {gem_dag_doel} kcal incl. sport"
+
     doel_blok = (
-        f"\n🎯 *Vs. jouw doelen ({DOEL_KCAL} kcal):*\n"
-        f"  🔥 Calorieën: {avg_cal} kcal — {doel_diff(avg_cal, DOEL_KCAL)}\n"
+        f"\n🎯 *Vs. jouw doelen ({doel_lijn_kcal}):*\n"
+        f"  🔥 Calorieën: {avg_cal} kcal — {doel_diff(avg_cal, gem_dag_doel)}\n"
         f"  💪 Eiwitten:  {avg_eiwit}g — {doel_diff(avg_eiwit, DOEL_EIWIT)}\n"
         f"  🌾 Koolh:     {avg_koolh}g — {doel_diff(avg_koolh, DOEL_KOOLH)}\n"
         f"  🥑 Vetten:    {avg_vet}g — {doel_diff(avg_vet, DOEL_VET)}\n"
@@ -279,9 +319,16 @@ def main() -> None:
     )
 
     recent_notes = [r.get("notities", "") for r in this_week if r.get("notities")]
+    sport_ai = ""
+    if sport_week:
+        sport_ai = (
+            f"Sport deze week: {int(sum(k for _, k in sport_week))} kcal verbrand op "
+            f"{len({d for d, _ in sport_week})} dagen; gem. dagdoel incl. sportcompensatie: {gem_dag_doel} kcal. "
+        )
     context_for_ai = (
         f"Doelen: {DOEL_KCAL} kcal, {DOEL_EIWIT}g eiwit, {DOEL_KOOLH}g koolh, {DOEL_VET}g vet, {DOEL_VEZEL}g vezels. "
         f"Doel-richting: {RICHTING_TEKST}. "
+        f"{sport_ai}"
         f"Gemiddeld deze week: {avg_cal} kcal, {avg_eiwit}g eiwit, score {avg_score}/10. "
         f"Notities: {'; '.join(recent_notes[-3:]) if recent_notes else 'geen'}."
     )
@@ -316,7 +363,7 @@ def main() -> None:
     if meal_lines:
         message += f"\n🍽️ *Verdeling per maaltijd:*\n{meal_lines}"
 
-    message += f"{doel_blok}{tdee_blok(maaltijden, wbd, today_d)}{prev_blok}\n💬 _{ai_tip}_"
+    message += f"{sport_blok}{doel_blok}{tdee_blok(maaltijden, wbd, today_d)}{prev_blok}\n💬 _{ai_tip}_"
 
     send_message(message)
 

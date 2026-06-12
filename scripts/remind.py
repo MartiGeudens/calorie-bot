@@ -5,6 +5,8 @@ import datetime
 import requests
 import pytz
 
+from intervals import activiteiten_van, sport_kcal_totaal, sport_regel, dagdoel
+
 BOT_TOKEN    = os.environ["BOT_TOKEN"]
 CHAT_ID      = int(os.environ["CHAT_ID"])
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
@@ -24,9 +26,9 @@ GENERIEKE_HERINNERING = (
     "Ik analyseer alles automatisch om middernacht! "
 )
 
-def load_doel_kcal() -> int:
+def load_doelen() -> dict:
     with open("data/config/config.json", encoding="utf-8") as f:
-        return json.load(f)["doelen"]["kcal"]
+        return json.load(f)["doelen"]
 
 def send_message(text: str) -> bool:
     resp = requests.post(f"{BASE_URL}/sendMessage", json={
@@ -130,8 +132,16 @@ def estimate_kcal(food_text: str):
             print(f"Kcal-schatting mislukt: {e}")
     return None
 
-def build_smart_message(food_messages: list) -> str:
-    doel_kcal = load_doel_kcal()
+def fetch_sport_today():
+    """(activiteiten, kcal) van vandaag — faalt stil via intervals.py."""
+    today = datetime.datetime.now(BRUSSELS).strftime("%Y-%m-%d")
+    acts = activiteiten_van(today)
+    return acts, sport_kcal_totaal(acts)
+
+def build_smart_message(food_messages: list, sport_acts: list, sport_kcal: int) -> str:
+    doelen    = load_doelen()
+    doel_kcal = doelen["kcal"]
+    dag_doel  = dagdoel(doel_kcal, float(doelen.get("sport_compensatie", 1.0)), sport_kcal)
     periods   = detect_periods(food_messages)
     kcal      = estimate_kcal("\n".join(food_messages))
 
@@ -147,12 +157,18 @@ def build_smart_message(food_messages: list) -> str:
         status = " · ".join(f"{e} {'✅' if periods[k] else '➖'}" for k, e in emoji_map)
         lines.append(status)
 
+    if sport_kcal > 0:
+        lines.append(
+            f"\n🚴 Gesport: *{sport_kcal} kcal* verbrand ({sport_regel(sport_acts)}) "
+            f"— je doel vandaag is daardoor *{dag_doel} kcal*."
+        )
+
     if kcal is not None:
-        rest = doel_kcal - kcal
+        rest = dag_doel - kcal
         if rest > 0:
-            lines.append(f"\nTot nu toe ~*{kcal} kcal* — nog ~{rest} kcal ruimte tot je doel van {doel_kcal}.")
+            lines.append(f"\nTot nu toe ~*{kcal} kcal* — nog ~{rest} kcal ruimte tot je doel van {dag_doel}.")
         else:
-            lines.append(f"\nTot nu toe ~*{kcal} kcal* — je zit ~{abs(rest)} kcal boven je doel van {doel_kcal}.")
+            lines.append(f"\nTot nu toe ~*{kcal} kcal* — je zit ~{abs(rest)} kcal boven je doel van {dag_doel}.")
 
     lines.append("\nNog iets gegeten dat er niet bij staat? Stuur het nog door — om middernacht analyseer ik alles!")
     return "\n".join(lines)
@@ -163,10 +179,16 @@ def main() -> None:
     try:
         updates       = get_updates_readonly()
         food_messages = collect_today_food(updates)
+        sport_acts, sport_kcal = fetch_sport_today()
         if food_messages:
-            message = build_smart_message(food_messages)
+            message = build_smart_message(food_messages, sport_acts, sport_kcal)
         else:
             message = GENERIEKE_HERINNERING
+            if sport_kcal > 0:
+                message += (
+                    f"\n\n🚴 Al wel gezien: *{sport_kcal} kcal* gesport vandaag "
+                    f"({sport_regel(sport_acts)}) — eet voldoende terug!"
+                )
     except Exception as e:
         print(f"Slimme herinnering mislukt, val terug op generieke tekst: {e}")
         message = GENERIEKE_HERINNERING

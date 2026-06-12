@@ -30,3 +30,4 @@ jobs:
           APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
           APPS_SCRIPT_KEY: ${{ secrets.APPS_SCRIPT_KEY }}
           TEST_MODE:       ${{ github.event.inputs.test_mode }}
+          INTERVALS_API_KEY: ${{ secrets.INTERVALS_API_KEY }}
