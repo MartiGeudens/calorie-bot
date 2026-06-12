@@ -753,6 +753,76 @@ with mock.patch.object(gc, "get_updates", return_value=[
 check("gewicht_check: upload aangeroepen (locked uit)", up_calls == [(75.0, False)], str(up_calls))
 check("gewicht_check: 📤-bevestiging in bericht", gc2_msgs and "intervals.icu" in gc2_msgs[0], str(gc2_msgs))
 
+# ── export_naar_intervals: Sheets-historiek → intervals.icu ──────────────────
+import export_naar_intervals as ex
+
+check("export: _num parseert '8/10'", ex._num("8/10") == 8.0)
+check("export: _num parseert '72,5'", ex._num("72,5") == 72.5)
+check("export: _num filtert 0 en None", ex._num(0) is None and ex._num(None) is None and ex._num("x") is None)
+
+ex_cfg = {"gewicht": True, "gewicht_locked": False, "kcal": True, "kcal_veld": "kcalConsumed",
+          "custom_velden": {"Voedingsscore": "score", "protein": "eiwitten",
+                            "carbohydrates": "koolhydraten", "fatTotal": "vetten"}}
+ex_gewichten = [
+    {"datum": "2026-06-02", "gewicht": 74.8},
+    {"datum": "2026-06-03", "gewicht": 75.0},
+    {"datum": "2026-05-30", "gewicht": 74.5},     # buiten bereik
+    {"datum": "2026-06-04", "gewicht": 0},          # geen meting
+]
+ex_maaltijden = [
+    {"datum": "2026-06-02", "calories": 2800, "score": "8/10", "eiwitten": 150,
+     "koolhydraten": 320, "vetten": 85, "notities": "prima"},
+    {"datum": "2026-06-05", "calories": 2500, "score": 7, "eiwitten": 130,
+     "koolhydraten": 280, "vetten": 70, "notities": ""},
+    {"datum": "2026-07-01", "calories": 2000, "score": 6, "eiwitten": 100,
+     "koolhydraten": 200, "vetten": 60},            # buiten bereik
+]
+recs = ex.bouw_records(ex_gewichten, ex_maaltijden, "2026-06-01", "2026-06-30", ex_cfg)
+check("export: 3 dagen met data", [r["id"] for r in recs] == ["2026-06-02", "2026-06-03", "2026-06-05"], str([r["id"] for r in recs]))
+d2 = recs[0]
+check("export: gewicht + voeding gemerged", d2["weight"] == 74.8 and d2["kcalConsumed"] == 2800
+      and d2["protein"] == 150 and d2["carbohydrates"] == 320 and d2["fatTotal"] == 85
+      and d2["Voedingsscore"] == 8.0, str(d2))
+check("export: dag met alleen gewicht", recs[1] == {"id": "2026-06-03", "weight": 75.0}, str(recs[1]))
+check("export: locked standaard niet meegestuurd", all("locked" not in r for r in recs))
+
+recs_locked = ex.bouw_records(ex_gewichten, [], "2026-06-01", "2026-06-30", {**ex_cfg, "gewicht_locked": True})
+check("export: locked-vlag indien config aan", all(r.get("locked") is True for r in recs_locked))
+
+recs_geen_kcal = ex.bouw_records([], ex_maaltijden, "2026-06-01", "2026-06-30", {**ex_cfg, "kcal": False})
+check("export: kcal-toggle uit → geen kcalConsumed", all("kcalConsumed" not in r for r in recs_geen_kcal)
+      and all("protein" in r for r in recs_geen_kcal))
+
+# batching + foutafhandeling
+ex_puts = []
+def ex_fput(url, json=None, auth=None, timeout=None, **kw):
+    ex_puts.append(json)
+    return FakeResp({"ok": True})
+groot = [{"id": f"2026-01-{d:02d}", "weight": 75} for d in range(1, 29)] * 5  # 140 records
+with mock.patch.object(ex.requests, "put", side_effect=ex_fput):
+    fouten = ex.push_bulk(groot, ("API_KEY", "x"))
+check("export: batching 50/50/40 zonder fouten", fouten == 0 and [len(b) for b in ex_puts] == [50, 50, 40], str([len(b) for b in ex_puts]))
+with mock.patch.object(ex.requests, "put", return_value=FakeResp({}, 500)):
+    check("export: mislukte batch geteld", ex.push_bulk(groot[:10], ("API_KEY", "x")) == 1)
+
+# volledige main: met en zonder notities
+ex_notes = []
+with mock.patch.object(ex, "fetch_sheet", side_effect=lambda u, k, t: {"gewicht": ex_gewichten, "maaltijden": ex_maaltijden}[t]), \
+     mock.patch.object(ex.requests, "put", side_effect=ex_fput), \
+     mock.patch.object(ex, "upload_kalendernotitie", side_effect=lambda d, n, b: (ex_notes.append((d, n)), True)[1]), \
+     mock.patch.object(ex.sys, "argv", ["x", "2026-06-01", "2026-06-30"]):
+    ex_puts.clear()
+    ex.main()
+check("export main: bulk verstuurd, geen notities", len(ex_puts) == 1 and ex_notes == [])
+with mock.patch.object(ex, "fetch_sheet", side_effect=lambda u, k, t: {"gewicht": ex_gewichten, "maaltijden": ex_maaltijden}[t]), \
+     mock.patch.object(ex.requests, "put", side_effect=ex_fput), \
+     mock.patch.object(ex, "upload_kalendernotitie", side_effect=lambda d, n, b: (ex_notes.append((d, n)), True)[1]), \
+     mock.patch.object(ex.sys, "argv", ["x", "2026-06-01", "2026-06-30", "--met-notities"]):
+    ex.main()
+check("export main: notities voor kcal-dagen binnen bereik",
+      [d for d, _ in ex_notes] == ["2026-06-02", "2026-06-05"]
+      and ex_notes[0][1].startswith("🍽️ Voeding: 2800 kcal · score 8/10"), str(ex_notes))
+
 print()
 if FOUTEN:
     print(f"❌ {len(FOUTEN)} test(s) gefaald: {FOUTEN}")

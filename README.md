@@ -110,7 +110,7 @@ Voeg recepten toe via `/recept_ai` (AI berekent macro's) of `/recept` (eigen mac
 | 1e van de maand 08:30 | Maandrapport met 6 grafieken |
 | Elke 10 min | /tips check |
 | Elke 30 min | Recepten check |
-| Handmatig | Wellness-import: historiek backfillen vanaf een startdatum |
+| Handmatig | Wellness-import (intervals.icu → Sheets) en Export (Sheets-historiek → intervals.icu) |
 
 ## Configuratie
 

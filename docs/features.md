@@ -69,8 +69,11 @@ Mobile-first GitHub Pages dashboard reading the sheets via the key-protected `do
 
 Empty cells mean "not measured", missing rows mean "not logged" — never zero. The Apps Script `doGet` (API-key protected) serves all tabs as JSON for the reports and dashboard; `exportNaarDoc()` mirrors everything daily into a Google Doc.
 
-## Historical backfill (`import_wellness.py`)
-Manual *Wellness-import* workflow: imports wellness (and optionally activities) from any start date — default 2026-06-01 — in batches of 50. Safe to re-run thanks to the upsert/dedupe above.
+## Historical backfill (both directions)
+- **`import_wellness.py`** (*Wellness-import* workflow): intervals.icu → Sheets. Imports wellness (and optionally activities) from any start date — default 2026-06-01 — in batches of 50.
+- **`export_naar_intervals.py`** (*Export naar intervals.icu* workflow): Sheets → intervals.icu. Builds one wellness record per logged day (weight, kcal intake, protein/carbs/fat, nutrition score — respecting the `intervals_upload` toggles and field names) and pushes them in bulk batches; the optional `met_notities` input also creates the 🍽️ calendar notes retroactively.
+
+Both are safe to re-run thanks to the upsert/dedupe semantics above.
 
 ## Configuration reference (`data/config/config.json`)
 

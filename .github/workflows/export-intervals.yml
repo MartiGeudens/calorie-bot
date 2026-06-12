@@ -1,0 +1,41 @@
+name: Export naar intervals.icu (handmatig, eenmalig)
+
+on:
+  workflow_dispatch:           # Handmatig via Actions → Run workflow
+    inputs:
+      start_datum:
+        description: 'Startdatum (YYYY-MM-DD)'
+        required: false
+        default: '2026-06-01'
+      eind_datum:
+        description: 'Einddatum (leeg = vandaag)'
+        required: false
+        default: ''
+      met_notities:
+        description: 'Ook 🍽️-kalendernotities per dag zetten'
+        type: boolean
+        default: false
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Installeer afhankelijkheden
+        run: pip install requests pytz
+
+      - name: Exporteer Sheets-historiek naar intervals.icu
+        run: >
+          python scripts/export_naar_intervals.py
+          ${{ inputs.start_datum }}
+          ${{ inputs.eind_datum }}
+          ${{ inputs.met_notities == true && '--met-notities' || '' }}
+        env:
+          APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
+          APPS_SCRIPT_KEY: ${{ secrets.APPS_SCRIPT_KEY }}
+          INTERVALS_API_KEY: ${{ secrets.INTERVALS_API_KEY }}

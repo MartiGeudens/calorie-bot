@@ -97,7 +97,12 @@ Thresholds live in `data/config/config.json`:
 
 > By deliberate choice there is **no recovery context in the morning question**: wake-up times vary and the Garmin sync isn't guaranteed to have happened yet at that hour.
 
-**Backfilling history:** run the *Wellness-import* workflow (Actions → Run workflow) to import wellness — and optionally activities — from a start date (default 2026-06-01, the start of food tracking) into the sheets. Safe to re-run: wellness upserts per date, sport dedupes on Intervals ID. Locally: `python scripts/import_wellness.py [start] [eind] [--zonder-sport]`.
+**Backfilling history (both directions):**
+
+- *Wellness-import* workflow — intervals.icu → Sheets: imports wellness (and optionally activities) from a start date (default 2026-06-01) into the tabs. Locally: `python scripts/import_wellness.py [start] [eind] [--zonder-sport]`.
+- *Export naar intervals.icu* workflow — Sheets → intervals.icu: pushes the existing history (weight + kcal/macros/score per day) into the wellness records in one go, so the /fitness plots cover the whole tracking period. Optional `met_notities` input also creates the 🍽️ calendar note for every logged day. Locally: `python scripts/export_naar_intervals.py [start] [eind] [--met-notities]`.
+
+Both are safe to re-run: wellness upserts per date, sport dedupes on Intervals ID and calendar notes are updated rather than duplicated.
 
 ## Writing back to intervals.icu (phase 3)
 
