@@ -17,13 +17,13 @@ Sends "Wat is je gewicht vandaag?". Nothing else — deliberately no recovery co
 
 ### 15:00 — Weight check (`gewicht_check.py`)
 1. Scans today's Telegram messages for a bare number between 30–200 (optionally followed by `kg`/`kilo`). Messages like "200 gram rijst" don't match. The *latest* number of the day wins.
-2. Saves it to the `Gewicht` tab and **uploads it to intervals.icu** (`weight` in the wellness record), so W/kg, eFTP and power stats there always match your morning weight. Confirmed in Telegram with 📤.
-3. **Recovery check**: if your HRV has been below its 7-day baseline for `hrv_alert_dagen` (default 3) consecutive nights *and* your average resting HR over those nights is at least `rhr_alert_boven_baseline` (default +3 bpm) above its baseline, you get a one-time 🟠 warning suggesting a rest day. It fires only on the first day the condition becomes true (it re-evaluates yesterday: if the alert was already true then, it stays silent) and needs at least 4 baseline nights of data to judge at all.
+2. Saves it to the `Gewicht` tab and **uploads it to intervals.icu** (`weight` in the wellness record), so W/kg, eFTP and power stats there always match your morning weight. Confirmed in Telegram.
+3. **Recovery check**: if your HRV has been below its 7-day baseline for `hrv_alert_dagen` (default 3) consecutive nights *and* your average resting HR over those nights is at least `rhr_alert_boven_baseline` (default +3 bpm) above its baseline, you get a one-time warning suggesting a rest day. It fires only on the first day the condition becomes true (it re-evaluates yesterday: if the alert was already true then, it stays silent) and needs at least 4 baseline nights of data to judge at all.
 
 ### 21:00 — Smart reminder (`remind.py`)
-- Already logged food → shows how many messages, which meal slots are covered (🌅☀️🌙🍎), an estimated kcal total so far and your remaining budget against the **dynamic day goal** (see Sport below).
-- Logged nothing → friendly generic reminder, plus a 🚴 line if you did sport today ("eet voldoende terug!").
-- **Carb advice**: if tomorrow's intervals.icu calendar contains a planned workout with load ≥ `tss_zware_dag` or ≥ 90 minutes, a 📅 line recommends extra carbs tonight. Silent while the calendar is unused.
+- Already logged food → shows how many messages, which meal slots are covered, an estimated kcal total so far and your remaining budget against the **dynamic day goal** (see Sport below).
+- Logged nothing → friendly generic reminder, plus a sport line if you did sport today ("eet voldoende terug!").
+- **Carb advice**: if tomorrow's intervals.icu calendar contains a planned workout with load ≥ `tss_zware_dag` or ≥ 90 minutes, an extra line recommends carbs tonight. Silent while the calendar is unused.
 - Any error in the smart path → falls back to the plain generic reminder. The reminder never silently disappears.
 
 ### 23:58 — Day processing (`process_food.py`)
@@ -34,9 +34,9 @@ The core run, deliberately *before* midnight (the row gets today's date, and Tel
 3. **Sport**: fetches today's *and yesterday's* activities from intervals.icu (yesterday catches activities that synced after the previous run). All go to the `Sport` tab — Apps Script dedupes on the Intervals ID, so nothing is ever double. Today's burned kcal set the **dynamic day goal**: `kcal-doel + sport_compensatie × burned kcal`.
 4. **Wellness**: fetches last night's HRV/RHR/sleep/readiness and upserts the last two days into the `Wellness` tab (one row per date, updated in place).
 5. **AI analysis** (Groq, llama-3.3-70b): estimates kcal and macros per meal slot using Belgian portion sizes. Recipes from `recepten.json` recognised in your text are used with their *exact* values instead of estimates. The prompt includes the dynamic day goal, last night's recovery and — on heavy training days (load ≥ `tss_zware_dag`) — a protein goal raised by `eiwit_extra_g`. The 1–10 score is judged against those adjusted goals.
-6. **Telegram summary**: per-meal breakdown, 🚴 sport block with the goal calculation (e.g. "2750 + 824 = 3574 kcal"), 💪 protein line on heavy days, totals, score and an AI note. A score below 5 triggers an extra concrete tip for tomorrow.
+6. **Telegram summary**: per-meal breakdown, sport block with the goal calculation (e.g. "2750 + 824 = 3574 kcal"), protein line on heavy days, totals, score and an AI note. A score below 5 triggers an extra concrete tip for tomorrow.
 7. **Storage**: one row in `Maaltijden` (incl. per-meal kcal and the day's sport kcal) — the streak counter only looks at this tab.
-8. **Write-back to intervals.icu** (after the Telegram flow is fully done): kcal intake into the wellness field `kcal_veld`, score/protein into your custom fields, the day summary as a 🍽️ calendar NOTE (upserted — re-runs update it, other notes are untouched) and a fueling line on each of today's activities ("Gevoed: 2800 kcal · 150g eiwit (score 8/10)" — your own description text is preserved, an old Gevoed line is replaced).
+8. **Write-back to intervals.icu** (after the Telegram flow is fully done): kcal intake into the wellness field `kcal_veld`, score/protein into your custom fields, the day summary as a calendar NOTE titled "Voeding: …" (upserted — re-runs update it, other notes are untouched) and a fueling line on each of today's activities ("Gevoed: 2800 kcal · 150g eiwit (score 8/10)" — your own description text is preserved, an old Gevoed line is replaced).
 
 ### Every 10 minutes — `/tips` (`tips.py`)
 On `/tips`: estimates what you've eaten so far, shows remaining budget against the dynamic day goal, macro progress (protein vs. the possibly raised goal) and 2–3 concrete suggestions for the rest of the day, recovery-aware. Without logged food it still shows your sport and raised budget.
@@ -46,17 +46,17 @@ On `/tips`: estimates what you've eaten so far, shows remaining budget against t
 
 ## Weekly report (Monday 08:00, `weekly_summary.py`)
 - Averages for kcal, macros and score over the last 7 logged days, compared against your goals — the kcal comparison uses the **average dynamic goal** (base goal + compensated sport per day).
-- 🚴 sport week block: activities, sport days, total burned.
-- 🫀 recovery block: average HRV, RHR and sleep vs. the previous week (read straight from the intervals.icu API, so history from before the integration counts).
-- 🍺 **Food↔recovery correlation**: compares HRV and sleep score in the night *after* alcohol days vs. other days. Alcohol days are detected with a word-boundary keyword list (bier(tje/s), pint(je/s), wijn, cava, tripel, gin, ...). Only shown with ≥ 21 nights of HRV data *and* ≥ 3 days in both groups — below that, correlations would be noise.
-- ⚖️ weight trend on a 7-day moving average (needs ≥ 3 weighings per window).
-- 🔬 **TDEE estimate**: `average intake − (Δ smoothed weight × 7700 / days)` over an adaptive 10–14 day window, requiring ~70% logged days. Deliberately *not* adjusted for sport — sport is already implicit in the intake-vs-weight arithmetic; the sport compensation only steers daily feedback. Estimates outside 1500–4500 kcal are flagged as unreliable instead of shown.
+- Sport week block: activities, sport days, total burned.
+- Recovery block: average HRV, RHR and sleep vs. the previous week (read straight from the intervals.icu API, so history from before the integration counts).
+- **Food↔recovery correlation**: compares HRV and sleep score in the night *after* alcohol days vs. other days. Alcohol days are detected with a word-boundary keyword list (bier(tje/s), pint(je/s), wijn, cava, tripel, gin, ...). Only shown with ≥ 21 nights of HRV data *and* ≥ 3 days in both groups — below that, correlations would be noise.
+- Weight trend on a 7-day moving average (needs ≥ 3 weighings per window).
+- **TDEE estimate**: `average intake − (Δ smoothed weight × 7700 / days)` over an adaptive 10–14 day window, requiring ~70% logged days. Deliberately *not* adjusted for sport — sport is already implicit in the intake-vs-weight arithmetic; the sport compensation only steers daily feedback. Estimates outside 1500–4500 kcal are flagged as unreliable instead of shown.
 
 ## Monthly report (1st, 08:30, `monthly_report.py`)
 Photo with six charts — weight + 7d average, kcal/day (bars coloured against the dynamic goal, purple overlay bars for burned sport kcal), protein/day, stacked meal distribution per week, HRV + resting HR, sleep hours + score — plus a caption with stats, sport and wellness summaries, best week, TDEE and an AI reflection. `test_mode` input runs it for the current month.
 
 ## Dashboard (`stats.html`)
-Mobile-first GitHub Pages dashboard reading the sheets via the key-protected `doGet`. Cards (weight, avg kcal, score, logged days) and charts: weight, 🫀 recovery (HRV + sleep score left axis, RHR right), kcal/day — with a 🚴 marker above sport-day bars and a goal line that rises with the dynamic goal — protein, meal distribution and score. 30/90/all-time toggle. URL + API key live only in your device's localStorage.
+Mobile-first GitHub Pages dashboard reading the sheets via the key-protected `doGet`. Cards (weight, avg kcal, score, logged days) and charts: weight, recovery (HRV + sleep score left axis, RHR right), kcal/day — with a cyclist marker above sport-day bars and a goal line that rises with the dynamic goal — protein, meal distribution and score. 30/90/all-time toggle. URL + API key live only in your device's localStorage.
 
 ## Data model (Google Sheets)
 
@@ -71,7 +71,7 @@ Empty cells mean "not measured", missing rows mean "not logged" — never zero. 
 
 ## Historical backfill (both directions)
 - **`import_wellness.py`** (*Wellness-import* workflow): intervals.icu → Sheets. Imports wellness (and optionally activities) from any start date — default 2026-06-01 — in batches of 50.
-- **`export_naar_intervals.py`** (*Export naar intervals.icu* workflow): Sheets → intervals.icu. Builds one wellness record per logged day (weight, kcal intake, protein/carbs/fat, nutrition score — respecting the `intervals_upload` toggles and field names) and pushes them in bulk batches; the optional `met_notities` input also creates the 🍽️ calendar notes retroactively.
+- **`export_naar_intervals.py`** (*Export naar intervals.icu* workflow): Sheets → intervals.icu. Builds one wellness record per logged day (weight, kcal intake, protein/carbs/fat, nutrition score — respecting the `intervals_upload` toggles and field names) and pushes them in bulk batches; the optional `met_notities` input also creates the calendar notes retroactively.
 
 Both are safe to re-run thanks to the upsert/dedupe semantics above.
 
@@ -90,7 +90,7 @@ Both are safe to re-run thanks to the upsert/dedupe semantics above.
 | | `gewicht_locked` | **false** | Send `"locked": true`. Off by default: the lock is record-level and could block later Garmin syncs that day — only useful if another source keeps overwriting your weight |
 | | `kcal` / `kcal_veld` | true / kcalConsumed | Upload intake; field name adjustable without code changes |
 | | `custom_velden` | Voedingsscore + built-ins | Wellness-field name → bot metric (`score`/`eiwitten`/`koolhydraten`/`vetten`). Protein/carbs/fat use intervals.icu's built-in fields (`protein`, `carbohydrates`, `fatTotal`); only `Voedingsscore` is a custom field you create once ([how-to](intervals.md)) |
-| | `kalendernotitie` | true | Day summary as 🍽️ NOTE in the training calendar |
+| | `kalendernotitie` | true | Day summary as NOTE in the training calendar |
 | | `activiteit_beschrijving` | true | Fueling line on each activity |
 
 Edit, commit, push — every workflow picks up the new values on its next run.

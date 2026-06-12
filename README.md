@@ -22,79 +22,79 @@ cron-job.org  →  Tijdsbeheer workflows (exacte tijden)
 Klik een feature open voor de uitleg. Het volledige naslagwerk — exacte regels, drempels en randgevallen — staat in [docs/features.md](docs/features.md).
 
 <details>
-<summary>🍽️ <b>Maaltijden loggen</b> — stuur gewoon berichten, AI analyseert om 23:58</summary>
+<summary><b>Maaltijden loggen</b> — stuur gewoon berichten, AI analyseert om 23:58</summary>
 
 Stuur maaltijden als gewone berichten doorheen de dag (`lunch: broodje kaas en tomaat`) of alles 's avonds in één keer. Elke avond om 23:58 analyseert de bot alles automatisch en stuurt een overzicht met totale calorieën, macro's per maaltijdmoment (ontbijt/lunch/avondeten/snacks), een score op 10 en een persoonlijke tip. Labels zijn optioneel maar verbeteren de uitsplitsing. Bij een score onder 5 volgt een extra concrete tip voor morgen.
 
 </details>
 
 <details>
-<summary>⚖️ <b>Gewicht bijhouden</b> — ochtendvraag om 07:00, vangnet om 23:58</summary>
+<summary><b>Gewicht bijhouden</b> — ochtendvraag om 07:00, vangnet om 23:58</summary>
 
 Dagelijkse ochtendvraag om 07:00. Antwoord met een getal (bv. `72.5`), wordt om 15:00 opgeslagen — en meteen geüpload naar intervals.icu, zodat W/kg en eFTP daar altijd kloppen. Stuur je het later? De dagverwerking om 23:58 vangt het alsnog op (met dubbele-rij-controle). De gewichtstrend in rapporten gebruikt een 7-daags voortschrijdend gemiddelde, zodat dagelijkse vocht-schommelingen eruit gefilterd worden.
 
 </details>
 
 <details>
-<summary>🔔 <b>Slimme avondherinnering</b> — weet wat je al logde (21:00)</summary>
+<summary><b>Slimme avondherinnering</b> — weet wat je al logde (21:00)</summary>
 
 Om 21:00 checkt de bot wat je al logde: nog niets → gewone herinnering; wel al berichten → welke maaltijdmomenten herkend zijn, geschatte kcal tot nu toe en je resterende budget (inclusief sport-verhoogd dagdoel). Staat er morgen een zware training in je intervals.icu-kalender, dan krijg je het advies om vanavond extra koolhydraten te eten. Faalt het slimme pad, dan valt de bot altijd terug op de generieke herinnering.
 
 </details>
 
 <details>
-<summary>💡 <b>/tips</b> — live caloriebudget op aanvraag</summary>
+<summary><b>/tips</b> — live caloriebudget op aanvraag</summary>
 
 Geeft op aanvraag een overzicht van je dag tot nu toe: hoeveel al gegeten, hoeveel budget er nog over is (tegen het dynamische dagdoel), macro-voortgang en 2–3 concrete suggesties voor de rest van de dag — met kennis van je herstel van vannacht en een verhoogd eiwitdoel op zware trainingsdagen. Wordt elke 10 minuten gecheckt.
 
 </details>
 
 <details>
-<summary>🚴 <b>Sport-integratie</b> — exacte Garmin-kcal verhogen je dagbudget</summary>
+<summary><b>Sport-integratie</b> — exacte Garmin-kcal verhogen je dagbudget</summary>
 
 Sportactiviteiten worden automatisch uitgelezen via de gratis [intervals.icu](https://intervals.icu) API met **exacte kcal uit je Garmin-meting** — geen AI-schatting. Elke activiteit komt in de Sport-tab (dedupe op Intervals ID), en het dagbudget stijgt mee: *doel + sport_compensatie × verbrande kcal* (een rit van 600 kcal maakt van 2750 dus 3350). De 23:58-analyse, /tips en de slimme herinnering rekenen er allemaal mee; de TDEE-schatting blijft bewust ongemoeid (sport zit daar al impliciet in). Valt intervals.icu weg, dan werkt alles gewoon zonder sportregel. Setup: [docs/intervals.md](docs/intervals.md).
 
 </details>
 
 <details>
-<summary>🫀 <b>Wellness & herstel</b> — HRV, slaap en rusthartslag sturen het advies</summary>
+<summary><b>Wellness & herstel</b> — HRV, slaap en rusthartslag sturen het advies</summary>
 
 Dezelfde koppeling leest ook Garmins nachtdata. De AI-analyse en /tips krijgen je herstelstatus mee ("HRV 58 · 6.8u slaap"), op zware trainingsdagen (TSS ≥ drempel) stijgt het eiwitdoel automatisch (+20g), en hapert je herstel meerdere dagen (lage HRV + verhoogde rusthartslag) dan krijg je om 15:00 eenmalig een waarschuwing — die herhaalt zichzelf niet zolang de dip aanhoudt. Historiek backfillen kan met de handmatige *Wellness-import* workflow. Bewuste keuze: géén herstelcontext bij de ochtendvraag (onregelmatige opsta-tijden + de Garmin-sync is dan niet gegarandeerd al gebeurd).
 
 </details>
 
 <details>
-<summary>📤 <b>Terugschrijven naar intervals.icu</b> — voeding naast je trainingsdata</summary>
+<summary><b>Terugschrijven naar intervals.icu</b> — voeding naast je trainingsdata</summary>
 
-De datastroom werkt ook omgekeerd: je ochtendgewicht gaat naar intervals.icu (W/kg en eFTP kloppen daar dus altijd), de dagelijkse kcal-inname, macro's (eiwit/koolhydraten/vet via de ingebouwde voedingsvelden) en voedingsscore komen in je wellness-record (plotbaar tegen HRV, slaap en trainingsload), het dagoverzicht verschijnt als 🍽️-notitie in je trainingskalender, en elke activiteit krijgt een fueling-regel ("Gevoed: 2800 kcal · 150g eiwit"). Her-runs verdubbelen niets: notities worden bijgewerkt en de fueling-regel vervangen. Elk onderdeel apart uitschakelbaar via `config.json` (blok `intervals_upload`). Setup van de custom velden: [docs/intervals.md](docs/intervals.md).
+De datastroom werkt ook omgekeerd: je ochtendgewicht gaat naar intervals.icu (W/kg en eFTP kloppen daar dus altijd), de dagelijkse kcal-inname, macro's (eiwit/koolhydraten/vet via de ingebouwde voedingsvelden) en voedingsscore komen in je wellness-record (plotbaar tegen HRV, slaap en trainingsload), het dagoverzicht verschijnt als voedingsnotitie in je trainingskalender, en elke activiteit krijgt een fueling-regel ("Gevoed: 2800 kcal · 150g eiwit"). Her-runs verdubbelen niets: notities worden bijgewerkt en de fueling-regel vervangen. Elk onderdeel apart uitschakelbaar via `config.json` (blok `intervals_upload`). Setup van de custom velden: [docs/intervals.md](docs/intervals.md).
 
 </details>
 
 <details>
-<summary>📊 <b>Wekelijks overzicht</b> — maandag 08:00, met TDEE en correlaties</summary>
+<summary><b>Wekelijks overzicht</b> — maandag 08:00, met TDEE en correlaties</summary>
 
 Elke maandag: gemiddelden per macro, vergelijking met je doelen (tegen het gemiddelde dynamische dagdoel) en vorige week, sportblok, herstelblok (HRV/RHR/slaap-trend) en een gewichtstrend op het 7-daags gemiddelde. Plus een **TDEE-schatting** — je werkelijke dagelijkse verbruik, berekend uit intake en gewichtsverloop (verschijnt na ±2 weken data). Uniek: voeding↔herstel-correlaties zoals "nacht na alcohol: HRV −12 · slaapscore −15" — pas getoond vanaf ±3 weken data om schijnverbanden te vermijden.
 
 </details>
 
 <details>
-<summary>📅 <b>Maandrapport</b> — 1e van de maand, 6 grafieken</summary>
+<summary><b>Maandrapport</b> — 1e van de maand, 6 grafieken</summary>
 
 Een foto met 6 grafieken: gewicht + trend, kcal/dag vs. (dynamisch) doel met sport-overlay, eiwit/dag, maaltijdverdeling per week, HRV + rusthartslag, en slaap (uren + score). Plus samenvatting met sport- en herstelstatistieken, beste week, TDEE en een AI-reflectie. Heeft een `test_mode` om direct een rapport over de lopende maand te genereren.
 
 </details>
 
 <details>
-<summary>🍳 <b>Recepten</b> — exacte waarden i.p.v. schattingen</summary>
+<summary><b>Recepten</b> — exacte waarden i.p.v. schattingen</summary>
 
 Voeg recepten toe via `/recept_ai` (AI berekent macro's) of `/recept` (eigen macro's opgeven). Recepten worden automatisch herkend in maaltijdlogs voor exacte berekeningen in plaats van AI-schattingen. Beschikbaar via het receptenboek op GitHub Pages, bookmarkbaar als app op je startscherm.
 
 </details>
 
 <details>
-<summary>📈 <b>Statistieken-dashboard</b> — alles in grafieken op je telefoon</summary>
+<summary><b>Statistieken-dashboard</b> — alles in grafieken op je telefoon</summary>
 
-`stats.html` op je GitHub Pages site: grafieken (Chart.js) van gewicht, 🫀 herstel (HRV + slaapscore + RHR), calorieën — met 🚴-markers en een doellijn die meestijgt op sportdagen — eiwitten, maaltijdverdeling en dagscore, met periode-toggle (30/90/alles). Beveiligd met een API-key die alleen in localStorage van je toestel staat — je data blijft privé, ook in een publieke repo. Setup: [docs/dashboard.md](docs/dashboard.md).
+`stats.html` op je GitHub Pages site: grafieken (Chart.js) van gewicht, herstel (HRV + slaapscore + RHR), calorieën — met sportmarkers en een doellijn die meestijgt op sportdagen — eiwitten, maaltijdverdeling en dagscore, met periode-toggle (30/90/alles). Beveiligd met een API-key die alleen in localStorage van je toestel staat — je data blijft privé, ook in een publieke repo. Setup: [docs/dashboard.md](docs/dashboard.md).
 
 </details>
 

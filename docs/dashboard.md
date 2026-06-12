@@ -1,8 +1,8 @@
 # Stats Dashboard Setup
 
-`stats.html` is a mobile-first dashboard on your GitHub Pages site showing your weight trend (raw + 7-day moving average), 🫀 recovery (HRV + sleep score on the left axis, resting HR on the right), daily calories vs. goal, daily protein vs. goal, meal distribution per week and daily score — with a 30 days / 90 days / all-time toggle.
+`stats.html` is a mobile-first dashboard on your GitHub Pages site showing your weight trend (raw + 7-day moving average), recovery (HRV + sleep score on the left axis, resting HR on the right), daily calories vs. goal, daily protein vs. goal, meal distribution per week and daily score — with a 30 days / 90 days / all-time toggle.
 
-On days with sport the calorie chart shows a 🚴 marker above the bar, the dashed goal line rises with it (goal + `sport_compensatie` × burned kcal) and the bar colour is judged against that dynamic goal. Sport and wellness data come from the `Sport` and `Wellness` tabs (see [intervals.md](intervals.md)); on an older Apps Script version without those types the dashboard simply works as before.
+On days with sport the calorie chart shows a cyclist marker above the bar, the dashed goal line rises with it (goal + `sport_compensatie` × burned kcal) and the bar colour is judged against that dynamic goal. Sport and wellness data come from the `Sport` and `Wellness` tabs (see [intervals.md](intervals.md)); on an older Apps Script version without those types the dashboard simply works as before.
 
 It reads data live from your Apps Script `doGet` endpoint, protected by the API key. Nothing sensitive is stored in the repo.
 

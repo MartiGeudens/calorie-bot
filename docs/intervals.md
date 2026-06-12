@@ -50,7 +50,7 @@ That's the only secret. Without it, everything keeps working — the bot simply 
 1. Record any activity with your Garmin (or pick a day that already has one).
 2. Run the **Verwerking** workflow manually: Actions → *Maaltijden verwerken* → Run workflow.
 3. Check that:
-   - the Telegram summary shows a 🚴 block with burned kcal and the raised day goal,
+   - the Telegram summary shows a sport block with burned kcal and the raised day goal,
    - the `Sport` tab contains one row per activity,
    - column `Sport (kcal)` in `Maaltijden` has the day total.
 4. In Apps Script you can also run `testSport()` and check the `Sport` tab (dedupe: running it twice must not create duplicate rows).
@@ -82,7 +82,7 @@ What the bot does with it:
 - **Overtraining/illness signal (15:00)** — if HRV stays below its 7-day baseline for 3 consecutive days *and* resting HR is elevated (defaults: 3 days, +3 bpm), the weight-check run sends a one-time warning suggesting a rest day. It only fires on the first day the condition becomes true.
 - **Dynamic protein goal** — on days with training load (TSS) ≥ `tss_zware_dag`, the protein goal is raised by `eiwit_extra_g` in the analysis, /tips and the daily summary.
 - **Planned-workout carb advice (21:00)** — if tomorrow's intervals.icu calendar contains a heavy workout (load ≥ threshold or ≥ 90 min), the evening reminder adds "extra koolhydraten vanavond is slim". Silent while the calendar is unused.
-- **Reports & dashboard** — weekly report shows HRV/RHR/sleep averages vs. last week plus a food↔recovery correlation ("night after alcohol days: HRV −12 · sleep score −15", shown only after ≥21 nights of data and ≥3 days in both groups); monthly report gets two extra chart panels (HRV & RHR, sleep) and a wellness line in the caption; the dashboard gets a 🫀 recovery chart. Reports read wellness directly from the intervals.icu API, so history from before this integration counts too.
+- **Reports & dashboard** — weekly report shows HRV/RHR/sleep averages vs. last week plus a food↔recovery correlation ("night after alcohol days: HRV −12 · sleep score −15", shown only after ≥21 nights of data and ≥3 days in both groups); monthly report gets two extra chart panels (HRV & RHR, sleep) and a wellness line in the caption; the dashboard gets a recovery chart. Reports read wellness directly from the intervals.icu API, so history from before this integration counts too.
 
 Thresholds live in `data/config/config.json`:
 
@@ -100,7 +100,7 @@ Thresholds live in `data/config/config.json`:
 **Backfilling history (both directions):**
 
 - *Wellness-import* workflow — intervals.icu → Sheets: imports wellness (and optionally activities) from a start date (default 2026-06-01) into the tabs. Locally: `python scripts/import_wellness.py [start] [eind] [--zonder-sport]`.
-- *Export naar intervals.icu* workflow — Sheets → intervals.icu: pushes the existing history (weight + kcal/macros/score per day) into the wellness records in one go, so the /fitness plots cover the whole tracking period. Optional `met_notities` input also creates the 🍽️ calendar note for every logged day. Locally: `python scripts/export_naar_intervals.py [start] [eind] [--met-notities]`.
+- *Export naar intervals.icu* workflow — Sheets → intervals.icu: pushes the existing history (weight + kcal/macros/score per day) into the wellness records in one go, so the /fitness plots cover the whole tracking period. Optional `met_notities` input also creates the calendar note for every logged day. Locally: `python scripts/export_naar_intervals.py [start] [eind] [--met-notities]`.
 
 Both are safe to re-run: wellness upserts per date, sport dedupes on Intervals ID and calendar notes are updated rather than duplicated.
 
@@ -123,7 +123,7 @@ The bot also pushes data *to* intervals.icu — every part individually switchab
 - **Weight (15:00 + 23:58 catch-net)** — your morning weight goes to the intervals.icu wellness record, so W/kg, eFTP and power stats are always correct there. `gewicht_locked` is **off by default**: the lock works at record level and could block later Garmin wellness syncs for that day; only enable it if another source (e.g. a smart scale sync) keeps overwriting your weight.
 - **Calorie intake (23:58)** — the AI day total is written to the wellness field named by `kcal_veld` (default `kcalConsumed`). After the first run, check the wellness page in intervals.icu; if the value doesn't show up, the field name differs on your account — adjust `kcal_veld` in config, no code change needed.
 - **Macros & nutrition score (23:58)** — protein, carbs and fat go into intervals.icu's **built-in** nutrition fields (API names `protein`, `carbohydrates`, `fatTotal`, all grams — [announcement](https://forum.intervals.icu/t/capture-carbs-protein-and-fat-intake/122594)); no setup needed beyond ticking them in the wellness dialog if you want to see them. Only the nutrition score needs one **custom field**: open the calendar → click a day → **Wellness** → **Fields** → **+** icon → code **`Voedingsscore`** (CamelCase, used by the API — don't change it once in use), type INPUT/number. All of them are plottable against HRV, sleep and training load on the /fitness page. The `custom_velden` config maps any wellness field (built-in or custom) to a bot metric (`score`/`eiwitten`/`koolhydraten`/`vetten`). To show fields on the calendar: Options → Wellness. ([Custom fields announcement](https://forum.intervals.icu/t/custom-wellness-fields/23188))
-- **Calendar note (23:58)** — the day summary (kcal, macros, score, AI note) appears as a 🍽️ NOTE in your training calendar. Upserted: re-runs update the existing note; other notes on that day are left alone.
+- **Calendar note (23:58)** — the day summary (kcal, macros, score, AI note) appears as a NOTE titled "Voeding: …" in your training calendar. Upserted: re-runs update the existing note; other notes on that day are left alone.
 - **Activity description (23:58)** — every activity of the day gets a fueling line appended: "Gevoed: 2800 kcal · 150g eiwit (score 8/10)". Your own description text is preserved; on re-runs the old Gevoed line is replaced, never duplicated.
 
 All uploads run *after* the Telegram flow has fully completed and fail silently — a missing key, missing custom field or API outage never affects meal processing.
@@ -132,7 +132,7 @@ All uploads run *after* the Telegram flow has fully completed and fail silently 
 
 | Symptom | Cause / fix |
 |---|---|
-| No 🚴 block in the summary | Secret `INTERVALS_API_KEY` missing or workflow not updated; check the Actions log for "intervals.icu:" lines |
+| No sport block in the summary | Secret `INTERVALS_API_KEY` missing or workflow not updated; check the Actions log for "intervals.icu:" lines |
 | HTTP 401/403 in the log | Wrong/expired API key — regenerate in Developer Settings |
 | Activity missing | Garmin → intervals.icu sync can take a few minutes; yesterday's late activities are caught by the next 23:58 run |
 | Duplicate rows in Sport tab | Old Apps Script version still deployed — deploy a new version (step 5) |
