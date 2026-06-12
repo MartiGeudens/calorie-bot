@@ -36,7 +36,7 @@ For each row in the table below, create one job in cron-job.org.
 
 | Workflow | URL | Schedule |
 |---|---|---|
-| Gewichtsvraag | `.../gewicht-vraag.yml/dispatches` | Daily at 09:00 |
+| Gewichtsvraag | `.../gewicht-vraag.yml/dispatches` | Daily at 07:00 |
 | Gewicht check | `.../gewicht-check.yml/dispatches` | Daily at 15:00 |
 | Herinnering | `.../herinnering.yml/dispatches` | Daily at 21:00 |
 | Verwerking | `.../verwerking.yml/dispatches` | Daily at **23:58** |

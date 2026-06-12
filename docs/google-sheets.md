@@ -35,6 +35,14 @@ Created **automatically** by Apps Script when the first activity arrives (see [i
 |---|---|---|---|---|---|---|---|
 | Datum | Activiteit | Type | Duur (min) | Afstand (km) | Kcal | Gem. HS | Intervals ID |
 
+### Tab: Wellness
+
+Also created **automatically** (one row per day, upserted on date — see [intervals.md](intervals.md)). Manual headers if you prefer:
+
+| A | B | C | D | E | F |
+|---|---|---|---|---|---|
+| Datum | HRV | RHR | Slaap (u) | Slaapscore | Readiness |
+
 ## 3. Set up Apps Script
 
 1. In the spreadsheet, go to **Extensions > Apps Script** (this binds the script to the spreadsheet — no spreadsheet ID needed).
@@ -46,7 +54,7 @@ The script contains:
 - `doPost(e)` — receives data from GitHub Actions and appends rows
 - `doGet(e)` — returns the last N rows as JSON (used by the weekly/monthly reports, streak checks and the stats dashboard). Protected by an API key.
 - `exportNaarDoc()` — optional daily export to a Google Doc
-- `testMaaltijd()` / `testGewicht()` / `testSport()` — run these from the editor to verify the sheet wiring
+- `testMaaltijd()` / `testGewicht()` / `testSport()` / `testWellness()` — run these from the editor to verify the sheet wiring
 
 ## 4. Set the API key
 
@@ -101,4 +109,4 @@ If you want data synced to a Google Doc for use in Claude:
 ## Notes
 
 - **Updating the script later?** Always use **Deploy > Manage deployments > Edit (✏️) > Version: New** — this keeps the URL stable. Creating a *new deployment* generates a new URL and breaks everything pointing at the old one (GitHub secret, dashboard).
-- The `Gewicht` and `Sport` tabs are created automatically on the first entry if they don't exist.
+- The `Gewicht`, `Sport` and `Wellness` tabs are created automatically on the first entry if they don't exist.

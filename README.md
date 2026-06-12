@@ -35,7 +35,7 @@ Geeft op aanvraag een live overzicht van het caloriebudget: hoeveel al gegeten, 
 Elke maandag om 08:00: gemiddelden per macro, vergelijking met je doelen en vorige week, gewichtstrend op basis van een 7-daags voortschrijdend gemiddelde, en een **TDEE-schatting** — je werkelijke dagelijkse verbruik, berekend uit je intake en gewichtsverloop (verschijnt na ±2 weken data).
 
 ### Maandrapport
-Op de 1e van de maand: een foto met 4 grafieken (gewicht + trend, kcal/dag vs. doel, eiwit/dag, maaltijdverdeling per week) plus samenvatting, TDEE en AI-reflectie.
+Op de 1e van de maand: een foto met 6 grafieken (gewicht + trend, kcal/dag vs. doel met sport-overlay, eiwit/dag, maaltijdverdeling per week, HRV + rusthartslag, slaap) plus samenvatting, sport- en herstelstatistieken, TDEE en AI-reflectie.
 
 ### Sport-integratie (Garmin → intervals.icu)
 Sportactiviteiten worden automatisch uitgelezen via de gratis [intervals.icu](https://intervals.icu) API met **exacte kcal uit je Garmin-meting** — geen AI-schatting. Elke activiteit komt in de Sport-tab, en het dagbudget stijgt mee: *doel + sport_compensatie × verbrande kcal* (een rit van 600 kcal maakt van 2750 dus 3350). De 23:58-analyse, /tips en de slimme herinnering rekenen er allemaal mee; de TDEE-schatting blijft bewust ongemoeid (sport zit daar al impliciet in). Valt intervals.icu weg, dan werkt alles gewoon zonder sportregel. Setup: [docs/intervals.md](docs/intervals.md).
@@ -63,6 +63,12 @@ Macrodoelen en doel-richting worden centraal beheerd in `data/config/config.json
     "vezels": 30,
     "richting": "aankomen",
     "sport_compensatie": 1.0
+  },
+  "wellness": {
+    "tss_zware_dag": 100,
+    "eiwit_extra_g": 20,
+    "hrv_alert_dagen": 3,
+    "rhr_alert_boven_baseline": 3
   }
 }
 ```
@@ -71,18 +77,21 @@ Macrodoelen en doel-richting worden centraal beheerd in `data/config/config.json
 
 `sport_compensatie` bepaalt hoeveel van de verbrande sport-kcal bij het dagdoel komt: `1.0` = alles terug-eten (logisch bij aankomen), `0.5` = halve compensatie als buffer tegen overschatting (gangbaar bij afvallen).
 
+Het `wellness`-blok stuurt de herstel-features: vanaf welke trainingsload een dag "zwaar" is en het eiwitdoel met `eiwit_extra_g` stijgt, en hoe gevoelig het overtraining-signaal is (aantal nachten onder de HRV-baseline + vereiste RHR-verhoging).
+
 ## Dagelijkse flow
 
 | Tijdstip | Actie |
 |---|---|
 | 07:00 | Gewichtsvraag |
-| 15:00 | Gewicht opslaan |
-| 21:00 | Slimme herinnering |
-| 23:58 | AI-analyse en opslag (+ gewicht-vangnet) |
-| Maandag 08:00 | Wekelijks rapport met TDEE |
-| 1e van de maand 08:30 | Maandrapport met grafieken |
+| 15:00 | Gewicht opslaan + herstel-check (eenmalig signaal bij haperend herstel) |
+| 21:00 | Slimme herinnering (+ carb-advies bij zware geplande training morgen) |
+| 23:58 | AI-analyse en opslag: maaltijden, sport, wellness (+ gewicht-vangnet) |
+| Maandag 08:00 | Wekelijks rapport met TDEE, sport en herstel |
+| 1e van de maand 08:30 | Maandrapport met 6 grafieken |
 | Elke 10 min | /tips check |
 | Elke 30 min | Recepten check |
+| Handmatig | Wellness-import: historiek backfillen vanaf een startdatum |
 
 ## Setup
 
@@ -116,6 +125,7 @@ De bot reageert uitsluitend op jouw `CHAT_ID` — anderen die je bot vinden kunn
 
 ## Goed om te weten
 
-- Macro's zijn AI-schattingen op basis van tekstbeschrijvingen (Belgische portiegroottes) — geen weegschaal-precisie, maar consistent genoeg voor trends. Recepten geven exacte waarden.
+- Macro's zijn AI-schattingen op basis van tekstbeschrijvingen (Belgische portiegroottes) — geen weegschaal-precisie, maar consistent genoeg voor trends. Recepten geven exacte waarden. Sport-kcal en wellness-data zijn wél exacte Garmin-metingen.
+- In `tests/` staat een offline testsuite (geen netwerk of API-keys nodig): `python tests/test_sport_integratie.py` en `node tests/test_apps_script.js`.
 - Telegram bewaart onbevestigde berichten maximaal 24 uur; de dagverwerking om 23:58 bevestigt ze. Daarom hoort die vóór middernacht te draaien — zo klopt ook de datum van de opgeslagen dag.
 - Alle botteksten en AI-prompts zijn Nederlandstalig; pas de prompts in `scripts/` aan voor een andere taal of regio.
