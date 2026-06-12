@@ -120,4 +120,23 @@ The bot also pushes data *to* intervals.icu — every part individually switchab
 }
 ```
 
-- **Weight (15:00 + 23:58 catch-net)** — your morning weight goes to the intervals.icu wellness record, so W/kg, eFTP and power stats are always correct there. `gewicht_locked` is **off by default**: the l
+- **Weight (15:00 + 23:58 catch-net)** — your morning weight goes to the intervals.icu wellness record, so W/kg, eFTP and power stats are always correct there. `gewicht_locked` is **off by default**: the lock works at record level and could block later Garmin wellness syncs for that day; only enable it if another source (e.g. a smart scale sync) keeps overwriting your weight.
+- **Calorie intake (23:58)** — the AI day total is written to the wellness field named by `kcal_veld` (default `kcalConsumed`). After the first run, check the wellness page in intervals.icu; if the value doesn't show up, the field name differs on your account — adjust `kcal_veld` in config, no code change needed.
+- **Macros & nutrition score (23:58)** — protein, carbs and fat go into intervals.icu's **built-in** nutrition fields (API names `protein`, `carbohydrates`, `fatTotal`, all grams — [announcement](https://forum.intervals.icu/t/capture-carbs-protein-and-fat-intake/122594)); no setup needed beyond ticking them in the wellness dialog if you want to see them. Only the nutrition score needs one **custom field**: open the calendar → click a day → **Wellness** → **Fields** → **+** icon → code **`Voedingsscore`** (CamelCase, used by the API — don't change it once in use), type INPUT/number. All of them are plottable against HRV, sleep and training load on the /fitness page. The `custom_velden` config maps any wellness field (built-in or custom) to a bot metric (`score`/`eiwitten`/`koolhydraten`/`vetten`). To show fields on the calendar: Options → Wellness. ([Custom fields announcement](https://forum.intervals.icu/t/custom-wellness-fields/23188))
+- **Calendar note (23:58)** — the day summary (kcal, macros, score, AI note) appears as a 🍽️ NOTE in your training calendar. Upserted: re-runs update the existing note; other notes on that day are left alone.
+- **Activity description (23:58)** — every activity of the day gets a fueling line appended: "Gevoed: 2800 kcal · 150g eiwit (score 8/10)". Your own description text is preserved; on re-runs the old Gevoed line is replaced, never duplicated.
+
+All uploads run *after* the Telegram flow has fully completed and fail silently — a missing key, missing custom field or API outage never affects meal processing.
+
+## Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| No 🚴 block in the summary | Secret `INTERVALS_API_KEY` missing or workflow not updated; check the Actions log for "intervals.icu:" lines |
+| HTTP 401/403 in the log | Wrong/expired API key — regenerate in Developer Settings |
+| Activity missing | Garmin → intervals.icu sync can take a few minutes; yesterday's late activities are caught by the next 23:58 run |
+| Duplicate rows in Sport tab | Old Apps Script version still deployed — deploy a new version (step 5) |
+| kcal is 0 for an activity | Activity has no calorie data in Garmin (e.g. manually created activity) |
+| No wellness data in the tab | Apps Script version without wellness support — deploy a new version |
+| Nutrition upload logs "check veldnamen" | The `Voedingsscore` custom field doesn't exist yet, or `kcal_veld` doesn't match your account — fix the field or the config |
+| Recovery alert never fires | That's good — it needs 3 consecutive low-HRV nights *plus* elevated resting HR, and won't repeat while the dip lasts |
