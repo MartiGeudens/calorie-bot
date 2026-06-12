@@ -130,5 +130,18 @@
     "vetten": 6,
     "vezels": 0,
     "macros_bron": "manueel"
+  },
+  "boterhammen_filet_americain": {
+    "portie": "2-3 boterhammen ~120-180g",
+    "ingredienten": [
+      "6 bruine boterhammen",
+      "150g filet américain spread"
+    ],
+    "calories": 867,
+    "eiwitten": 31,
+    "koolhydraten": 108,
+    "vetten": 35,
+    "vezels": 0,
+    "macros_bron": "manueel"
   }
 }
