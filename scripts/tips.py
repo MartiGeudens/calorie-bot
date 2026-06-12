@@ -7,7 +7,8 @@ import requests
 import pytz
 from groq import Groq
 
-from intervals import activiteiten_van, sport_kcal_totaal, sport_regel, dagdoel
+from intervals import (activiteiten_van, sport_kcal_totaal, sport_regel, dagdoel,
+                       sport_load_totaal, wellness_van, wellness_regel)
 
 BOT_TOKEN    = os.environ["BOT_TOKEN"]
 CHAT_ID      = int(os.environ["CHAT_ID"])
@@ -29,6 +30,17 @@ DOEL_KOOLH = _cfg["koolhydraten"]
 DOEL_VET   = _cfg["vetten"]
 DOEL_VEZEL = _cfg["vezels"]
 SPORT_COMPENSATIE = float(_cfg.get("sport_compensatie", 1.0))
+
+def load_wellness_config() -> dict:
+    try:
+        with open("data/config/config.json", encoding="utf-8") as f:
+            return json.load(f).get("wellness", {})
+    except Exception:
+        return {}
+
+_wcfg         = load_wellness_config()
+TSS_ZWAAR     = float(_wcfg.get("tss_zware_dag", 100))
+EIWIT_EXTRA_G = int(_wcfg.get("eiwit_extra_g", 20))
 RICHTING_TEKST = {
     "aankomen":    "aankomen — een calorie-surplus en voldoende eiwit zijn gewenst; het resterende budget mag zeker opgegeten worden",
     "afvallen":    "afvallen — een calorie-tekort is gewenst",
@@ -132,7 +144,9 @@ def collect_today_food(updates: list) -> list:
 
     return food_messages
 
-def analyze_partial_day(food_text: str, sport_kcal: int = 0, sport_omschrijving: str = "") -> dict:
+def analyze_partial_day(food_text: str, sport_kcal: int = 0, sport_omschrijving: str = "",
+                        herstel: str = "", dag_tss: int = 0, eiwit_doel: int = None) -> dict:
+    eiwit_doel = eiwit_doel or DOEL_EIWIT
     recipes = load_recipes()
     recipe_context = get_recipe_context(food_text, recipes)
     now = datetime.datetime.now(BRUSSELS)
@@ -145,6 +159,19 @@ def analyze_partial_day(food_text: str, sport_kcal: int = 0, sport_omschrijving:
             f"Het caloriedoel van vandaag is daarom {dag_doel} kcal in plaats van {DOEL_KCAL} kcal; "
             f"gebruik {dag_doel} kcal als budget voor je aanbevelingen."
         )
+        if dag_tss >= TSS_ZWAAR:
+            sport_context += (
+                f" Het is een zware trainingsdag (trainingsload {dag_tss}); "
+                f"het eiwitdoel is daarom {eiwit_doel}g — geef eiwitrijke suggesties extra prioriteit."
+            )
+
+    herstel_context = ""
+    if herstel:
+        herstel_context = (
+            f"\nHerstelstatus vannacht (Garmin): {herstel}. "
+            f"Bij slechte slaap of lage HRV: adviseer vroeger eten, weinig/geen alcohol "
+            f"en voldoende koolhydraten en eiwit."
+        )
 
     prompt = f"""Je bent een voedingsdeskundige. Analyseer de maaltijden van vandaag tot nu toe en geef concrete tips voor de rest van de dag.
 Gebruik typische Belgische portiegroottes.
@@ -152,12 +179,12 @@ Huidig tijdstip: {now.strftime('%H:%M')}.
 
 Dagelijkse doelen van deze persoon:
 - Calorieën: {DOEL_KCAL} kcal
-- Eiwitten: {DOEL_EIWIT}g
+- Eiwitten: {eiwit_doel}g
 - Koolhydraten: {DOEL_KOOLH}g
 - Vetten: {DOEL_VET}g
 - Vezels: {DOEL_VEZEL}g
 - Richting: {RICHTING_TEKST}
-{sport_context}{recipe_context}
+{sport_context}{herstel_context}{recipe_context}
 
 Maaltijden tot nu toe:
 {food_text}
@@ -207,6 +234,9 @@ def main() -> None:
     sport_acts = activiteiten_van(today)
     sport_kcal = sport_kcal_totaal(sport_acts)
     dag_doel   = dagdoel(DOEL_KCAL, SPORT_COMPENSATIE, sport_kcal)
+    dag_tss    = sport_load_totaal(sport_acts)
+    eiwit_doel_vandaag = DOEL_EIWIT + EIWIT_EXTRA_G if dag_tss >= TSS_ZWAAR else DOEL_EIWIT
+    herstel    = wellness_regel(wellness_van(today))
 
     if not food_messages:
         msg = (
@@ -232,7 +262,8 @@ def main() -> None:
         print(f"Sport vandaag: {sport_kcal} kcal → dagbudget {dag_doel} kcal")
 
     try:
-        data = analyze_partial_day(food_text, sport_kcal, sport_regel(sport_acts))
+        data = analyze_partial_day(food_text, sport_kcal, sport_regel(sport_acts),
+                                   herstel, dag_tss, eiwit_doel_vandaag)
     except Exception as e:
         print(f"Tips analyse mislukt: {e}")
         send_message("❌ Kon tips niet berekenen. Probeer opnieuw.")
@@ -249,7 +280,7 @@ def main() -> None:
     tips_list = data.get("aanbevelingen", [])
 
     rest_kcal  = dag_doel   - kcal
-    rest_eiwit = DOEL_EIWIT - eiwitten
+    rest_eiwit = eiwit_doel_vandaag - eiwitten
     rest_koolh = DOEL_KOOLH - koolh
     rest_vet   = DOEL_VET   - vetten
     rest_vezel = DOEL_VEZEL - vezels
@@ -272,6 +303,8 @@ def main() -> None:
             f"🚴 {sport_regel(sport_acts)} — *{sport_kcal} kcal* verbrand "
             f"(doel: {DOEL_KCAL} + {dag_doel - DOEL_KCAL})\n"
         )
+        if dag_tss >= TSS_ZWAAR:
+            sport_lijn += f"💪 Zware trainingsdag (load {dag_tss}) → eiwitdoel *{eiwit_doel_vandaag}g*\n"
 
     tips_tekst = "\n".join(f"• {t}" for t in tips_list) if tips_list else "Geen specifieke aanbevelingen."
 
@@ -281,7 +314,7 @@ def main() -> None:
         f"{sport_lijn}"
         f"{budget_lijn}\n\n"
         f"*Macro's tot nu toe:*\n"
-        f"{macro_lijn('Eiwitten', eiwitten, DOEL_EIWIT)}\n"
+        f"{macro_lijn('Eiwitten', eiwitten, eiwit_doel_vandaag)}\n"
         f"{macro_lijn('Koolh.', koolh, DOEL_KOOLH)}\n"
         f"{macro_lijn('Vetten', vetten, DOEL_VET)}\n"
         f"{macro_lijn('Vezels', vezels, DOEL_VEZEL)}\n\n"

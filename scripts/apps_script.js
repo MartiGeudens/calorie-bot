@@ -28,6 +28,14 @@ function exportNaarDoc() {
     body.appendParagraph(sport.slice(-60).map(r => r.join(" | ")).join("\n"));
   }
 
+  // Wellness — laatste 60 dagen
+  var wellnessSheet = ss.getSheetByName("Wellness");
+  var wellness = wellnessSheet ? wellnessSheet.getDataRange().getValues() : [];
+  body.appendParagraph("WELLNESS").setHeading(DocumentApp.ParagraphHeading.HEADING1);
+  if (wellness.length > 0) {
+    body.appendParagraph(wellness.slice(-60).map(r => r.join(" | ")).join("\n"));
+  }
+
   doc.saveAndClose();
 }
 
@@ -77,6 +85,38 @@ function doPost(e) {
         nieuw++;
       });
       return jsonResponse({ status: "ok", nieuw: nieuw });
+
+    } else if (data.type === "wellness") {
+      // 1 rij per dag, upsert op datum — de 23:58-run stuurt vandaag én gisteren,
+      // dus dezelfde dag kan een tweede keer binnenkomen met vollediger data.
+      var sheet = ss.getSheetByName("Wellness");
+      if (!sheet) {
+        sheet = ss.insertSheet("Wellness");
+        sheet.appendRow(["Datum", "HRV", "RHR", "Slaap (u)", "Slaapscore", "Readiness"]);
+      }
+      var rijVanDatum = {};
+      var lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        sheet.getRange(2, 1, lastRow - 1, 1).getValues().forEach(function(r, i) {
+          var d = r[0] instanceof Date
+            ? Utilities.formatDate(r[0], "Europe/Brussels", "yyyy-MM-dd")
+            : String(r[0]);
+          if (d) rijVanDatum[d] = i + 2;
+        });
+      }
+      var verwerkt = 0;
+      (data.records || []).forEach(function(w) {
+        if (!w || !w.datum) return;
+        var rij = [w.datum, w.hrv || "", w.rhr || "", w.slaap_u || "", w.slaapscore || "", w.readiness || ""];
+        if (rijVanDatum[w.datum]) {
+          sheet.getRange(rijVanDatum[w.datum], 1, 1, 6).setValues([rij]);
+        } else {
+          sheet.appendRow(rij);
+          rijVanDatum[w.datum] = sheet.getLastRow();
+        }
+        verwerkt++;
+      });
+      return jsonResponse({ status: "ok", verwerkt: verwerkt });
 
     } else {
       var sheet = ss.getSheetByName("Maaltijden") || ss.getActiveSheet();
@@ -180,6 +220,28 @@ function doGet(e) {
       });
       return jsonResponse(result);
 
+    } else if (type === "wellness") {
+      var sheet = ss.getSheetByName("Wellness");
+      if (!sheet) return jsonResponse([]);
+      var allData = sheet.getDataRange().getValues();
+      if (allData.length <= 1) return jsonResponse([]);
+      var rows = allData.slice(1).slice(-limit);
+      var result = rows.map(function(row) {
+        var datumVal = row[0];
+        var datumStr = datumVal instanceof Date
+          ? Utilities.formatDate(datumVal, "Europe/Brussels", "yyyy-MM-dd")
+          : (datumVal ? datumVal.toString() : "");
+        return {
+          datum:      datumStr,
+          hrv:        row[1] || 0,
+          rhr:        row[2] || 0,
+          slaap_u:    row[3] || 0,
+          slaapscore: row[4] || 0,
+          readiness:  row[5] || 0
+        };
+      });
+      return jsonResponse(result);
+
     } else if (type === "gewicht") {
       var sheet = ss.getSheetByName("Gewicht");
       if (!sheet) return jsonResponse([]);
@@ -223,6 +285,16 @@ function testMaaltijd() {
 function testGewicht() {
   doPost({ postData: { contents: JSON.stringify({
     type: "gewicht", datum: "2026-06-01", gewicht: 72.5
+  })}});
+}
+
+function testWellness() {
+  doPost({ postData: { contents: JSON.stringify({
+    type: "wellness",
+    records: [
+      { datum: "2026-06-11", hrv: 62, rhr: 48, slaap_u: 7.3, slaapscore: 81, readiness: 75 },
+      { datum: "2026-06-12", hrv: 58, rhr: 50, slaap_u: 6.8, slaapscore: 72, readiness: null }
+    ]
   })}});
 }
 

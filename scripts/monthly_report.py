@@ -15,6 +15,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from intervals import wellness_tussen, alcohol_contrast
+
 BOT_TOKEN       = os.environ["BOT_TOKEN"]
 CHAT_ID         = os.environ["CHAT_ID"]
 APPS_SCRIPT_URL = os.environ["APPS_SCRIPT_URL"]
@@ -125,9 +127,10 @@ def maand_bereik(today: datetime.date):
 
 # ── Grafieken ─────────────────────────────────────────────────────────────────
 def maak_grafiek(rows: list, wbd: dict, eerste: datetime.date, laatste: datetime.date,
-                 titel: str, sport_by_day: dict = None) -> bytes:
+                 titel: str, sport_by_day: dict = None, wellness: list = None) -> bytes:
     sport_by_day = sport_by_day or {}
-    fig, axes = plt.subplots(2, 2, figsize=(11, 8.5))
+    wellness = wellness or []
+    fig, axes = plt.subplots(3, 2, figsize=(11, 12.5))
     fig.suptitle(f"Maandrapport — {titel}", fontsize=14, fontweight="bold")
 
     dagen   = [r["datum"].day for r in rows]
@@ -189,6 +192,47 @@ def maak_grafiek(rows: list, wbd: dict, eerste: datetime.date, laatste: datetime
         bottom = [b + w for b, w in zip(bottom, waarden)]
     ax.legend(fontsize=7)
     ax.set_title("Gem. kcal per maaltijd, per week", fontsize=10)
+
+    # 5. Herstel: HRV + rusthartslag
+    ax = axes[2][0]
+    w_pts = [(parse_date(w.get("datum", "")), w) for w in wellness]
+    w_pts = [(d, w) for d, w in w_pts if d and eerste <= d <= laatste]
+    hrv_pts = [(d.day, w["hrv"]) for d, w in w_pts if w.get("hrv")]
+    rhr_pts = [(d.day, w["rhr"]) for d, w in w_pts if w.get("rhr")]
+    if hrv_pts:
+        ax.plot([x for x, _ in hrv_pts], [y for _, y in hrv_pts], "-o",
+                color="#4c9a6e", markersize=3, linewidth=1.5, label="HRV")
+        ax.legend(loc="upper left", fontsize=8)
+    if rhr_pts:
+        ax_r = ax.twinx()
+        ax_r.plot([x for x, _ in rhr_pts], [y for _, y in rhr_pts], "-o",
+                  color="#c95f5f", markersize=3, linewidth=1.5, label="RHR")
+        ax_r.tick_params(labelsize=8)
+        ax_r.legend(loc="upper right", fontsize=8)
+    if not hrv_pts and not rhr_pts:
+        ax.text(0.5, 0.5, "geen wellness-data", ha="center", va="center",
+                transform=ax.transAxes, color="#888")
+    ax.set_title("Herstel: HRV & rusthartslag", fontsize=10)
+
+    # 6. Slaap: uren + score
+    ax = axes[2][1]
+    slaap_pts = [(d.day, w["slaap_u"]) for d, w in w_pts if w.get("slaap_u")]
+    score_pts = [(d.day, w["slaapscore"]) for d, w in w_pts if w.get("slaapscore")]
+    if slaap_pts:
+        ax.bar([x for x, _ in slaap_pts], [y for _, y in slaap_pts],
+               color="#5b7fa6", alpha=0.7, label="uren")
+        ax.legend(loc="upper left", fontsize=8)
+    if score_pts:
+        ax_s = ax.twinx()
+        ax_s.plot([x for x, _ in score_pts], [y for _, y in score_pts], "-",
+                  color="#c9a227", linewidth=1.5, label="score")
+        ax_s.set_ylim(0, 100)
+        ax_s.tick_params(labelsize=8)
+        ax_s.legend(loc="upper right", fontsize=8)
+    if not slaap_pts and not score_pts:
+        ax.text(0.5, 0.5, "geen slaapdata", ha="center", va="center",
+                transform=ax.transAxes, color="#888")
+    ax.set_title("Slaap (u) & slaapscore", fontsize=10)
 
     for rij in axes:
         for ax in rij:
@@ -253,6 +297,7 @@ def main() -> None:
     maaltijden_raw = fetch_data("maaltijden", 70)
     gewichten_raw  = fetch_data("gewicht", 70)
     sport_raw      = fetch_data("sport", 200)
+    wellness       = wellness_tussen(eerste.isoformat(), laatste.isoformat())
 
     if not maaltijden_raw:
         if UNAUTHORIZED:
@@ -359,10 +404,38 @@ def main() -> None:
         )
         sport_ai = f", sport: {sport_tot} kcal verbrand op {len(sport_by_day)} dagen"
 
+    wellness_lijn = ""
+    wellness_ai   = ""
+    if wellness:
+        def w_avg(key):
+            vals = [r[key] for r in wellness if isinstance(r, dict) and r.get(key)]
+            return round(sum(vals) / len(vals), 1) if vals else None
+        hrv_m, rhr_m  = w_avg("hrv"), w_avg("rhr")
+        slaap_m, sc_m = w_avg("slaap_u"), w_avg("slaapscore")
+        delen = []
+        if hrv_m:
+            delen.append(f"HRV {round(hrv_m)}")
+        if rhr_m:
+            delen.append(f"RHR {round(rhr_m)}")
+        if slaap_m:
+            sl = f"slaap {slaap_m}u"
+            if sc_m:
+                sl += f" (score {round(sc_m)})"
+            delen.append(sl)
+        if delen:
+            wellness_lijn = "🫀 Gem. " + " · ".join(delen) + "\n"
+            wellness_ai   = ", herstel: " + " · ".join(delen)
+        contrast = alcohol_contrast(maaltijden_raw, wellness)
+        if contrast:
+            extra = f"🍺 Nacht na alcohol (n={contrast['n_alcohol']}): HRV {contrast['d_hrv']:+.0f}"
+            if contrast.get("d_slaapscore") is not None:
+                extra += f" · slaapscore {contrast['d_slaapscore']:+.0f}"
+            wellness_lijn += extra + "\n"
+
     reflectie = groq_reflectie(
         f"{titel}: {len(rows)}/{dagen_in_maand} dagen gelogd, gem. {avg_kcal} kcal "
         f"(doel {DOEL_KCAL}), gem. {avg_eiwit}g eiwit (doel {DOEL_EIWIT}g), "
-        f"score {avg_score}/10, gewicht: {gewicht_lijn}{sport_ai}"
+        f"score {avg_score}/10, gewicht: {gewicht_lijn}{sport_ai}{wellness_ai}"
     )
 
     caption = (
@@ -372,6 +445,7 @@ def main() -> None:
         f"💪 Gem. {avg_eiwit}g eiwit/dag (doel {DOEL_EIWIT}g)\n"
         f"⭐ Gem. score: {avg_score}/10\n"
         f"{sport_lijn}"
+        f"{wellness_lijn}"
         f"{gewicht_lijn}\n"
         f"{beste_lijn}"
         f"{tdee_lijn}"
@@ -379,7 +453,7 @@ def main() -> None:
     if reflectie:
         caption += f"\n\n💬 _{reflectie[:280]}_"
 
-    png = maak_grafiek(rows, wbd, eerste, laatste, titel, sport_by_day)
+    png = maak_grafiek(rows, wbd, eerste, laatste, titel, sport_by_day, wellness)
 
     if not send_photo(png, caption):
         # vangnet: stuur minstens de tekst

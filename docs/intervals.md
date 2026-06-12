@@ -71,6 +71,34 @@ Google Sheets: "Sport" tab + "Sport (kcal)" column in "Maaltijden"
 - Activities without calories (e.g. manually added ones) are logged with 0 kcal and don't affect the budget.
 - intervals.icu unreachable or no key set → everything works exactly as before, without the sport line. Sport can never block meal processing.
 
+## Wellness (phase 2)
+
+The same API key also unlocks Garmin's daily wellness data (overnight HRV, resting heart rate, sleep duration + score, readiness) via `GET /api/v1/athlete/0/wellness?oldest=&newest=`. No extra setup — if the sport integration works, wellness works.
+
+What the bot does with it:
+
+- **Nightly storage (23:58)** — the day-processing run fetches today + yesterday and upserts them into a `Wellness` tab (Datum | HRV | RHR | Slaap (u) | Slaapscore | Readiness). The tab is created automatically.
+- **Recovery-aware AI (23:58 + /tips)** — the analysis and tips prompts receive last night's recovery ("HRV 58 · RHR 50 · 6.8u slaap (score 72)"), steering advice toward earlier meals, less alcohol and enough carbs/protein when recovery is poor.
+- **Overtraining/illness signal (15:00)** — if HRV stays below its 7-day baseline for 3 consecutive days *and* resting HR is elevated (defaults: 3 days, +3 bpm), the weight-check run sends a one-time warning suggesting a rest day. It only fires on the first day the condition becomes true.
+- **Dynamic protein goal** — on days with training load (TSS) ≥ `tss_zware_dag`, the protein goal is raised by `eiwit_extra_g` in the analysis, /tips and the daily summary.
+- **Planned-workout carb advice (21:00)** — if tomorrow's intervals.icu calendar contains a heavy workout (load ≥ threshold or ≥ 90 min), the evening reminder adds "extra koolhydraten vanavond is slim". Silent while the calendar is unused.
+- **Reports & dashboard** — weekly report shows HRV/RHR/sleep averages vs. last week plus a food↔recovery correlation ("night after alcohol days: HRV −12 · sleep score −15", shown only after ≥21 nights of data and ≥3 days in both groups); monthly report gets two extra chart panels (HRV & RHR, sleep) and a wellness line in the caption; the dashboard gets a 🫀 recovery chart. Reports read wellness directly from the intervals.icu API, so history from before this integration counts too.
+
+Thresholds live in `data/config/config.json`:
+
+```json
+"wellness": {
+  "tss_zware_dag": 100,
+  "eiwit_extra_g": 20,
+  "hrv_alert_dagen": 3,
+  "rhr_alert_boven_baseline": 3
+}
+```
+
+> By deliberate choice there is **no recovery context in the morning question**: wake-up times vary and the Garmin sync isn't guaranteed to have happened yet at that hour.
+
+**Backfilling history:** run the *Wellness-import* workflow (Actions → Run workflow) to import wellness — and optionally activities — from a start date (default 2026-06-01, the start of food tracking) into the sheets. Safe to re-run: wellness upserts per date, sport dedupes on Intervals ID. Locally: `python scripts/import_wellness.py [start] [eind] [--zonder-sport]`.
+
 ## Troubleshooting
 
 | Symptom | Cause / fix |

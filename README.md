@@ -23,7 +23,7 @@ cron-job.org  →  Tijdsbeheer workflows (exacte tijden)
 Stuur maaltijden als gewone berichten doorheen de dag (`lunch: broodje kaas en tomaat`). Elke avond om 23:58 analyseert de bot alles automatisch en stuurt een overzicht met totale calorieën, macro's per maaltijdmoment (ontbijt/lunch/avondeten/snacks), een score op 10 en een persoonlijke tip. Labels zijn optioneel maar verbeteren de uitsplitsing.
 
 ### Gewicht bijhouden
-Dagelijkse ochtendvraag om 09:00. Antwoord met een getal (bv. `72.5`), wordt om 15:00 opgeslagen. Stuur je het later? De dagverwerking om 23:58 vangt het alsnog op.
+Dagelijkse ochtendvraag om 07:00. Antwoord met een getal (bv. `72.5`), wordt om 15:00 opgeslagen. Stuur je het later? De dagverwerking om 23:58 vangt het alsnog op.
 
 ### Slimme avondherinnering
 Om 21:00 checkt de bot wat je al logde: nog niets → gewone herinnering; wel al berichten → welke maaltijdmomenten herkend zijn, geschatte kcal tot nu toe en je resterende budget.
@@ -39,6 +39,9 @@ Op de 1e van de maand: een foto met 4 grafieken (gewicht + trend, kcal/dag vs. d
 
 ### Sport-integratie (Garmin → intervals.icu)
 Sportactiviteiten worden automatisch uitgelezen via de gratis [intervals.icu](https://intervals.icu) API met **exacte kcal uit je Garmin-meting** — geen AI-schatting. Elke activiteit komt in de Sport-tab, en het dagbudget stijgt mee: *doel + sport_compensatie × verbrande kcal* (een rit van 600 kcal maakt van 2750 dus 3350). De 23:58-analyse, /tips en de slimme herinnering rekenen er allemaal mee; de TDEE-schatting blijft bewust ongemoeid (sport zit daar al impliciet in). Valt intervals.icu weg, dan werkt alles gewoon zonder sportregel. Setup: [docs/intervals.md](docs/intervals.md).
+
+### Wellness & herstel (HRV, slaap, rusthartslag)
+Dezelfde koppeling leest ook Garmins nachtdata. De AI-analyse en /tips krijgen je herstelstatus mee ("HRV 58 · 6.8u slaap"), op zware trainingsdagen (TSS ≥ drempel) stijgt het eiwitdoel automatisch (+20g), en hapert je herstel meerdere dagen (lage HRV + verhoogde rusthartslag) dan krijg je om 15:00 eenmalig een waarschuwing. Het weekrapport toont HRV/RHR/slaap-trends én unieke voeding↔herstel-correlaties ("nacht na alcohol: HRV −12") zodra er ±3 weken data is; het maandrapport en dashboard krijgen herstel- en slaapgrafieken. Staat er morgen een zware training in je intervals.icu-kalender, dan adviseert de avondherinnering extra koolhydraten. Drempels in `config.json` (blok `wellness`).
 
 ### Recepten
 Voeg recepten toe via `/recept_ai` (AI berekent macro's) of `/recept` (eigen macro's opgeven). Recepten worden automatisch herkend in maaltijdlogs voor exacte berekeningen in plaats van AI-schattingen. Beschikbaar via het receptenboek op GitHub Pages.
@@ -72,7 +75,7 @@ Macrodoelen en doel-richting worden centraal beheerd in `data/config/config.json
 
 | Tijdstip | Actie |
 |---|---|
-| 09:00 | Gewichtsvraag |
+| 07:00 | Gewichtsvraag |
 | 15:00 | Gewicht opslaan |
 | 21:00 | Slimme herinnering |
 | 23:58 | AI-analyse en opslag (+ gewicht-vangnet) |

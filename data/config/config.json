@@ -7,5 +7,11 @@
     "vezels": 30,
     "richting": "aankomen",
     "sport_compensatie": 1.0
+  },
+  "wellness": {
+    "tss_zware_dag": 100,
+    "eiwit_extra_g": 20,
+    "hrv_alert_dagen": 3,
+    "rhr_alert_boven_baseline": 3
   }
 }

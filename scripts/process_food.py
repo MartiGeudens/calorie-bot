@@ -6,7 +6,8 @@ import requests
 import pytz
 from groq import Groq
 
-from intervals import activiteiten_tussen, sport_kcal_totaal, sport_regel, dagdoel
+from intervals import (activiteiten_tussen, sport_kcal_totaal, sport_regel, dagdoel,
+                       sport_load_totaal, wellness_tussen, wellness_regel)
 
 BOT_TOKEN       = os.environ["BOT_TOKEN"]
 CHAT_ID         = int(os.environ["CHAT_ID"])
@@ -30,6 +31,17 @@ DOEL_KOOLH = _cfg["koolhydraten"]
 DOEL_VET   = _cfg["vetten"]
 DOEL_VEZEL = _cfg["vezels"]
 SPORT_COMPENSATIE = float(_cfg.get("sport_compensatie", 1.0))
+
+def load_wellness_config() -> dict:
+    try:
+        with open("data/config/config.json", encoding="utf-8") as f:
+            return json.load(f).get("wellness", {})
+    except Exception:
+        return {}
+
+_wcfg         = load_wellness_config()
+TSS_ZWAAR     = float(_wcfg.get("tss_zware_dag", 100))
+EIWIT_EXTRA_G = int(_wcfg.get("eiwit_extra_g", 20))
 RICHTING_TEKST = {
     "aankomen":    "aankomen — een calorie-surplus en voldoende eiwit zijn gewenst; te weinig eten is hier het probleem, niet te veel",
     "afvallen":    "afvallen — een calorie-tekort is gewenst",
@@ -207,7 +219,9 @@ def collect_food_messages(updates: list) -> list:
 
     return food_messages
 
-def analyze_food(food_text: str, sport_kcal: int = 0, sport_omschrijving: str = "") -> dict:
+def analyze_food(food_text: str, sport_kcal: int = 0, sport_omschrijving: str = "",
+                 herstel: str = "", dag_tss: int = 0, eiwit_doel: int = None) -> dict:
+    eiwit_doel = eiwit_doel or DOEL_EIWIT
     recipes = load_recipes()
     recipe_context = get_recipe_context(food_text, recipes)
 
@@ -220,19 +234,32 @@ def analyze_food(food_text: str, sport_kcal: int = 0, sport_omschrijving: str = 
             f"({DOEL_KCAL} + {dag_doel - DOEL_KCAL} sportcompensatie). "
             f"Gebruik {dag_doel} kcal als calorie-referentie voor de score en de notitie."
         )
+        if dag_tss >= TSS_ZWAAR:
+            sport_context += (
+                f" Het was een zware trainingsdag (trainingsload {dag_tss}); "
+                f"het eiwitdoel van vandaag is daarom {eiwit_doel}g in plaats van {DOEL_EIWIT}g."
+            )
+
+    herstel_context = ""
+    if herstel:
+        herstel_context = (
+            f"\n\nHerstelstatus vannacht (Garmin-meting): {herstel}. "
+            f"Weeg dit mee in je notitie: bij slechte slaap of lage HRV zijn vroeger eten, "
+            f"minder alcohol en voldoende koolhydraten en eiwit extra belangrijk."
+        )
 
     prompt = f"""Je bent een voedingsdeskundige. Analyseer de onderstaande maaltijdbeschrijving.
 Gebruik typische Belgische portiegroottes. Wees realistisch, niet optimistisch.
 
 Dagelijkse doelen van deze persoon:
 - Calorieën: {DOEL_KCAL} kcal
-- Eiwitten: {DOEL_EIWIT}g
+- Eiwitten: {eiwit_doel}g
 - Koolhydraten: {DOEL_KOOLH}g
 - Vetten: {DOEL_VET}g
 - Vezels: {DOEL_VEZEL}g
 - Richting: {RICHTING_TEKST}
 
-Gebruik deze doelen én de richting als referentie voor de score (1–10) en de notitie. Een score van 10 = doelen perfect behaald.{sport_context}{recipe_context}
+Gebruik deze doelen én de richting als referentie voor de score (1–10) en de notitie. Een score van 10 = doelen perfect behaald.{sport_context}{herstel_context}{recipe_context}
 
 Maaltijden van vandaag (meerdere berichten, chronologisch):
 {food_text}
@@ -348,6 +375,27 @@ def fetch_sport_today(today: str):
     vandaag_acts = [a for a in alle_acts if a["datum"] == today]
     return vandaag_acts, sport_kcal_totaal(vandaag_acts)
 
+def fetch_wellness_today(today: str):
+    """Haalt wellness van de laatste 2 dagen op, bewaart die in de Wellness-tab
+    (upsert in Apps Script) en geeft het record van vandaag terug. Faalt stil."""
+    gisteren = (
+        datetime.datetime.strptime(today, "%Y-%m-%d") - datetime.timedelta(days=1)
+    ).strftime("%Y-%m-%d")
+
+    records = wellness_tussen(gisteren, today)
+    recent = [r for r in records if r["datum"] in (gisteren, today)
+              and any(r.get(k) for k in ("hrv", "rhr", "slaap_u", "slaapscore", "readiness"))]
+    if recent:
+        try:
+            if save_to_sheets({"type": "wellness", "records": recent}):
+                print(f"Wellness: {len(recent)} dag(en) naar de Wellness-tab gestuurd")
+            else:
+                print("Wellness: opslaan in Wellness-tab mislukt")
+        except Exception as e:
+            print(f"Wellness: opslaan mislukt: {e}")
+
+    return next((r for r in records if r["datum"] == today), None)
+
 def main() -> None:
     today   = datetime.datetime.now(BRUSSELS).strftime("%Y-%m-%d")
     updates = get_updates()
@@ -356,10 +404,17 @@ def main() -> None:
     late_weight   = find_today_weight(updates)
     clear_updates(updates)
 
-    # Sport altijd ophalen en loggen, óók als er geen maaltijden zijn
+    # Sport en wellness altijd ophalen en loggen, óók als er geen maaltijden zijn
     sport_acts, sport_kcal = fetch_sport_today(today)
     dag_doel = dagdoel(DOEL_KCAL, SPORT_COMPENSATIE, sport_kcal)
     sport_samenvatting = sport_regel(sport_acts)
+    dag_tss = sport_load_totaal(sport_acts)
+    eiwit_doel_vandaag = DOEL_EIWIT + EIWIT_EXTRA_G if dag_tss >= TSS_ZWAAR else DOEL_EIWIT
+
+    w_vandaag = fetch_wellness_today(today)
+    herstel = wellness_regel(w_vandaag)
+    if herstel:
+        print(f"Wellness vandaag: {herstel}")
 
     weight_note = ""
     if late_weight is not None and not weight_already_saved_today(today):
@@ -389,7 +444,8 @@ def main() -> None:
     send_message("⏳ Even analyseren…")
 
     try:
-        data = analyze_food(food_text, sport_kcal, sport_samenvatting)
+        data = analyze_food(food_text, sport_kcal, sport_samenvatting,
+                            herstel, dag_tss, eiwit_doel_vandaag)
     except Exception as e:
         print(f"Analyse-fout: {e}")
         send_message("❌ Analyse mislukt. Probeer morgen opnieuw of beschrijf je maaltijden wat duidelijker.")
@@ -417,6 +473,8 @@ def main() -> None:
             f"🚴 Sport: *{sport_kcal} kcal* verbrand — _{sport_samenvatting}_\n"
             f"🎯 Dagdoel: {DOEL_KCAL} + {dag_doel - DOEL_KCAL} = *{dag_doel} kcal*\n"
         )
+        if dag_tss >= TSS_ZWAAR:
+            sport_blok += f"💪 Zware trainingsdag (load {dag_tss}) → eiwitdoel *{eiwit_doel_vandaag}g*\n"
 
     send_message(
         f"📊 *Voedingsoverzicht — {today}*\n\n"
@@ -442,6 +500,8 @@ def main() -> None:
             f"\nVandaag {sport_kcal} kcal gesport — dagbudget was {dag_doel} kcal."
             if sport_kcal > 0 else ""
         )
+        if herstel:
+            sport_alert_context += f"\nHerstelstatus vannacht: {herstel}."
         stuur_score_alert(food_text, data['score'], sport_alert_context)
 
     streak = calculate_streak("maaltijden")

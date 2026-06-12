@@ -1,8 +1,11 @@
 import os
 import re
+import json
 import datetime
 import requests
 import pytz
+
+from intervals import wellness_tussen, herstel_alert
 
 BOT_TOKEN       = os.environ["BOT_TOKEN"]
 CHAT_ID         = int(os.environ["CHAT_ID"])
@@ -127,5 +130,50 @@ def main():
     else:
         send_message(f"⚖️ Gewicht ontvangen ({gewicht} kg) maar opslaan mislukte.")
 
+def load_wellness_config() -> dict:
+    try:
+        with open("data/config/config.json", encoding="utf-8") as f:
+            return json.load(f).get("wellness", {})
+    except Exception:
+        return {}
+
+def check_herstel_alert(today: str) -> None:
+    """Overtraining/ziekte-signaal (15:00-run): HRV meerdere dagen onder de
+    7d-baseline én verhoogde rusthartslag → proactief bericht.
+    Vuurt alleen op de eerste dag dat de conditie waar wordt en faalt stil —
+    de gewichtscheck mag hier nooit door breken."""
+    try:
+        cfg   = load_wellness_config()
+        dagen = int(cfg.get("hrv_alert_dagen", 3))
+        delta = float(cfg.get("rhr_alert_boven_baseline", 3))
+
+        start = (datetime.date.fromisoformat(today)
+                 - datetime.timedelta(days=dagen + 13)).isoformat()
+        records = wellness_tussen(start, today)
+        if not records:
+            return
+
+        alert = herstel_alert(records, today, dagen, delta)
+        if not alert:
+            return
+
+        gisteren = (datetime.date.fromisoformat(today) - datetime.timedelta(days=1)).isoformat()
+        if herstel_alert(records, gisteren, dagen, delta):
+            print("Herstel-alert: conditie gold gisteren ook al — geen herhaalbericht")
+            return
+
+        send_message(
+            f"🟠 *Herstel hapert*\n\n"
+            f"Je HRV zit al *{alert['dagen']} dagen* onder je baseline "
+            f"({alert['hrv_nu']} vs. {alert['hrv_baseline']}) en je rusthartslag is verhoogd "
+            f"({alert['rhr_nu']} vs. {alert['rhr_baseline']}).\n\n"
+            f"Mogelijk broeit er iets (vermoeidheid of ziekte): overweeg een rustdag, "
+            f"focus op slaap en eet voldoende eiwit. 💤"
+        )
+        print("Herstel-alert verstuurd")
+    except Exception as e:
+        print(f"Herstel-alert check mislukt (genegeerd): {e}")
+
 if __name__ == "__main__":
     main()
+    check_herstel_alert(today_str())

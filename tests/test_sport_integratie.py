@@ -156,6 +156,10 @@ class GetRouter:
         if "intervals.icu" in url:
             if self.intervals_error:
                 raise self.intervals_error
+            if "/wellness" in url:
+                return FakeResp(getattr(self, "wellness_data", []))
+            if "/events" in url:
+                return FakeResp(getattr(self, "events_data", []))
             return FakeResp(self.intervals_data)
         if "getUpdates" in url:
             if self.updates_served:
@@ -276,6 +280,7 @@ class WSFakeDT(datetime.datetime):
         return cls(2026, 6, 11, 8, 0, tzinfo=tz)
 
 with mock.patch.object(ws, "fetch_data", side_effect=fake_ws_fetch), \
+     mock.patch.object(ws, "wellness_tussen", return_value=[]), \
      mock.patch.object(ws, "send_message", side_effect=lambda t: ws_messages.append(t)), \
      mock.patch.object(ws.datetime, "datetime", WSFakeDT), \
      mock.patch.object(ws.groq_client.chat.completions, "create",
@@ -294,6 +299,7 @@ if ws_messages:
 # zonder sport-data (oude Apps Script → lege lijst): geen sportblok, doel = 2750
 ws_messages.clear()
 with mock.patch.object(ws, "fetch_data", side_effect=lambda t, l: {"maaltijden": maaltijden_rows, "gewicht": gewicht_rows, "sport": []}[t]), \
+     mock.patch.object(ws, "wellness_tussen", return_value=[]), \
      mock.patch.object(ws, "send_message", side_effect=lambda t: ws_messages.append(t)), \
      mock.patch.object(ws.datetime, "datetime", WSFakeDT), \
      mock.patch.object(ws.groq_client.chat.completions, "create",
@@ -326,6 +332,7 @@ class MRFakeDT(datetime.datetime):
         return cls(2026, 6, 1, 8, 30, tzinfo=tz)
 
 with mock.patch.object(mr, "fetch_data", side_effect=fake_mr_fetch), \
+     mock.patch.object(mr, "wellness_tussen", return_value=[]), \
      mock.patch.object(mr, "send_photo", side_effect=fake_send_photo), \
      mock.patch.object(mr, "groq_reflectie", return_value="Mooie maand."), \
      mock.patch.object(mr.datetime, "datetime", MRFakeDT):
@@ -334,6 +341,293 @@ check("monthly: grafiek gemaakt (png)", mr_sent["photo"])
 if mr_sent["caption"]:
     c = mr_sent["caption"]
     check("monthly: sportregel in caption", "🚴 3 activiteiten op 2 dagen — 1352 kcal verbrand" in c, c)
+
+# ════════════════════════════════════════════════════════════════════════════
+# FASE 2 — wellness, herstel-alert, eiwitdoel, carb-advies, correlaties
+# ════════════════════════════════════════════════════════════════════════════
+
+WELLNESS_API = [
+    {"id": "2026-06-11", "hrv": 62, "restingHR": 48, "sleepSecs": 26280, "sleepScore": 81, "readiness": 75},
+    {"id": "2026-06-12", "hrv": 58.4, "restingHR": 50, "sleepSecs": 24480, "sleepScore": 72, "readiness": None},
+    {"id": "2026-06-10", "hrv": None, "restingHR": None, "sleepSecs": None, "sleepScore": None, "readiness": None},
+]
+
+# ── intervals: wellness-parsing ───────────────────────────────────────────────
+with mock.patch.object(intervals.requests, "get", return_value=FakeResp(WELLNESS_API)):
+    wrecs = intervals.wellness_tussen("2026-06-10", "2026-06-12")
+    check("wellness: 3 records, gesorteerd", len(wrecs) == 3 and wrecs[0]["datum"] == "2026-06-10")
+    w11 = next(r for r in wrecs if r["datum"] == "2026-06-11")
+    check("wellness: velden geparsed", w11["hrv"] == 62 and w11["rhr"] == 48 and w11["slaap_u"] == 7.3 and w11["slaapscore"] == 81)
+    w10 = next(r for r in wrecs if r["datum"] == "2026-06-10")
+    check("wellness: lege dag → None-velden", all(w10[k] is None for k in ("hrv", "rhr", "slaap_u", "slaapscore", "readiness")))
+    wv = intervals.wellness_van("2026-06-12")
+    check("wellness: wellness_van pakt juiste dag", wv and wv["hrv"] == 58.4)
+regel = intervals.wellness_regel({"hrv": 58.4, "rhr": 50, "slaap_u": 6.8, "slaapscore": 72})
+check("wellness: regel-formattering", regel == "HRV 58 · RHR 50 · 6.8u slaap (score 72)", regel)
+check("wellness: lege regel", intervals.wellness_regel(None) == "")
+
+# ── intervals: trainingsload ──────────────────────────────────────────────────
+LOAD_API = [{"id": "iL1", "start_date_local": "2026-06-12T08:30:00", "type": "Ride", "name": "Rit",
+             "moving_time": 4416, "distance": 28766, "calories": 824, "average_heartrate": 148,
+             "icu_training_load": 130}]
+with mock.patch.object(intervals.requests, "get", return_value=FakeResp(LOAD_API)):
+    lacts = intervals.activiteiten_van("2026-06-12")
+    check("load: icu_training_load geparsed", lacts[0]["load"] == 130)
+    check("load: sport_load_totaal", intervals.sport_load_totaal(lacts) == 130)
+
+# ── intervals: herstel-alert ──────────────────────────────────────────────────
+import datetime as _dt
+def _mk_wellness(vandaag, hrv_per_offset, rhr_per_offset):
+    out = []
+    for off, hrv in hrv_per_offset.items():
+        d = (_dt.date.fromisoformat(vandaag) - _dt.timedelta(days=off)).isoformat()
+        out.append({"datum": d, "hrv": hrv, "rhr": rhr_per_offset.get(off), "slaap_u": 7, "slaapscore": 75, "readiness": None})
+    return out
+
+VD = "2026-06-12"
+basis_hrv = {o: 60 for o in range(3, 10)}
+basis_rhr = {o: 48 for o in range(3, 10)}
+
+# vuurt: 3 lage HRV-dagen + verhoogde RHR
+recs = _mk_wellness(VD, {**basis_hrv, 0: 50, 1: 51, 2: 49}, {**basis_rhr, 0: 53, 1: 52, 2: 53})
+alert = intervals.herstel_alert(recs, VD, 3, 3)
+check("alert: vuurt bij 3 lage dagen + hoge RHR", alert is not None and alert["dagen"] == 3, str(alert))
+check("alert: baseline klopt", alert and alert["hrv_baseline"] == 60.0, str(alert))
+
+# vuurt niet: RHR normaal
+recs = _mk_wellness(VD, {**basis_hrv, 0: 50, 1: 51, 2: 49}, {**basis_rhr, 0: 48, 1: 49, 2: 48})
+check("alert: stil bij normale RHR", intervals.herstel_alert(recs, VD, 3, 3) is None)
+
+# vuurt niet: maar 2 lage dagen
+recs = _mk_wellness(VD, {**basis_hrv, 0: 50, 1: 51, 2: 61}, {**basis_rhr, 0: 53, 1: 52, 2: 53})
+check("alert: stil bij 2/3 lage dagen", intervals.herstel_alert(recs, VD, 3, 3) is None)
+
+# vuurt niet: HRV-gat in recente reeks
+recs = _mk_wellness(VD, {**basis_hrv, 0: 50, 2: 49}, {**basis_rhr, 0: 53, 2: 53})
+check("alert: stil bij ontbrekende nacht", intervals.herstel_alert(recs, VD, 3, 3) is None)
+
+# vuurt niet: te weinig baseline-dagen
+recs = _mk_wellness(VD, {0: 50, 1: 51, 2: 49, 3: 60, 4: 60}, {0: 53, 1: 52, 2: 53, 3: 48, 4: 48})
+check("alert: stil bij te korte baseline", intervals.herstel_alert(recs, VD, 3, 3) is None)
+
+# ── intervals: alcohol_contrast ───────────────────────────────────────────────
+wel30 = []
+for i in range(30):
+    d = (_dt.date(2026, 6, 12) - _dt.timedelta(days=i)).isoformat()
+    wel30.append({"datum": d, "hrv": 60, "rhr": 48, "slaap_u": 7, "slaapscore": 80, "readiness": None})
+# nacht ná alcoholdag: HRV 48, slaapscore 65
+maal30 = []
+alcohol_offsets = {3, 9, 15, 21}
+for i in range(1, 29):
+    d = (_dt.date(2026, 6, 12) - _dt.timedelta(days=i)).isoformat()
+    if i in alcohol_offsets:
+        maal30.append({"datum": d, "maaltijden": "frietjes en 3 pintjes"})
+        nacht = (_dt.date.fromisoformat(d) + _dt.timedelta(days=1)).isoformat()
+        for r in wel30:
+            if r["datum"] == nacht:
+                r["hrv"], r["slaapscore"] = 48, 65
+    else:
+        maal30.append({"datum": d, "maaltijden": "havermout en kip met rijst"})
+contrast = intervals.alcohol_contrast(maal30, wel30)
+check("contrast: berekend", contrast is not None and contrast["n_alcohol"] == 4, str(contrast))
+check("contrast: HRV-verschil = -12", contrast and contrast["d_hrv"] == -12.0, str(contrast))
+check("contrast: slaapscore-verschil = -15", contrast and contrast["d_slaapscore"] == -15.0, str(contrast))
+check("contrast: None bij <21 nachten", intervals.alcohol_contrast(maal30, wel30[:15]) is None)
+geen_alc = [{"datum": r["datum"], "maaltijden": "water en brood"} for r in maal30]
+check("contrast: None zonder alcoholdagen", intervals.alcohol_contrast(geen_alc, wel30) is None)
+check("contrast: geen vals woord-match ('origineel')",
+      not intervals.ALCOHOL_RE.search("origineel gerecht met gember"))
+check("contrast: 'pintje' matcht wel", bool(intervals.ALCOHOL_RE.search("twee pintjes gedronken")))
+
+# ── process_food: volledige run met wellness + zware trainingsdag ────────────
+check("process_food: wellness-config geladen", process_food.TSS_ZWAAR == 100 and process_food.EIWIT_EXTRA_G == 20)
+
+ACTS_ZWAAR = [{"id": "iZ1", "start_date_local": "2026-06-11T08:30:00", "type": "Ride", "name": "Lange rit",
+               "moving_time": 7200, "distance": 60000, "calories": 1200, "average_heartrate": 150,
+               "icu_training_load": 130}]
+WELLNESS_VANDAAG = [
+    {"id": "2026-06-10", "hrv": 61, "restingHR": 49, "sleepSecs": 27000, "sleepScore": 80, "readiness": None},
+    {"id": "2026-06-11", "hrv": 58, "restingHR": 50, "sleepSecs": 24480, "sleepScore": 72, "readiness": None},
+]
+sent_messages.clear(); saved_payloads.clear(); captured_prompts.clear()
+router3 = GetRouter(
+    updates=[{"update_id": 9, "message": {"from": {"id": 123, "is_bot": False},
+              "date": datetime.datetime.now().timestamp(), "text": "lunch: kip met rijst"}}],
+    intervals_data=ACTS_ZWAAR,
+)
+router3.wellness_data = WELLNESS_VANDAAG
+with mock.patch.object(process_food.requests, "get", side_effect=router3), \
+     mock.patch.object(process_food.requests, "post", side_effect=fake_post_all), \
+     mock.patch.object(process_food.groq_client.chat.completions, "create", side_effect=fake_groq_create), \
+     mock.patch.object(process_food, "save_last_update_id", lambda x: None), \
+     mock.patch.object(process_food.datetime, "datetime", wraps=datetime.datetime) as fdt3:
+    fdt3.now = lambda tz=None: datetime.datetime(2026, 6, 11, 23, 58, tzinfo=tz) if tz else datetime.datetime(2026, 6, 11, 23, 58)
+    fdt3.strptime = datetime.datetime.strptime
+    process_food.main()
+
+p3 = captured_prompts[-1]
+check("fase2 main: herstelcontext in prompt", "Herstelstatus vannacht" in p3 and "HRV 58" in p3, p3[-400:])
+check("fase2 main: zware dag in prompt", "zware trainingsdag" in p3 and "170g" in p3)
+check("fase2 main: eiwitdoel-regel in prompt", "- Eiwitten: 170g" in p3)
+wellness_saves = [x for x in saved_payloads if x and x.get("type") == "wellness"]
+check("fase2 main: wellness opgeslagen (2 dagen)", len(wellness_saves) == 1 and len(wellness_saves[0]["records"]) == 2, str(wellness_saves))
+ov3 = [m for m in sent_messages if "Voedingsoverzicht" in m]
+check("fase2 main: eiwitregel in 🚴-blok", ov3 and "eiwitdoel *170g*" in ov3[0], ov3[0][:400] if ov3 else "")
+
+# ── tips: herstel + eiwitdoel in prompt ───────────────────────────────────────
+check("tips: wellness-config geladen", tips.TSS_ZWAAR == 100 and tips.EIWIT_EXTRA_G == 20)
+captured_prompts.clear()
+with mock.patch.object(tips.groq_client.chat.completions, "create", side_effect=lambda **kw: (
+        captured_prompts.append(kw["messages"][0]["content"]),
+        types.SimpleNamespace(choices=[types.SimpleNamespace(message=types.SimpleNamespace(
+            content=json.dumps({"kcal_gegeten": 1500, "eiwitten": 80, "koolhydraten": 150,
+                                "vetten": 50, "vezels": 15, "maaltijden_samenvatting": "x", "aanbevelingen": ["y"]})))])
+    )[1]):
+    tips.analyze_partial_day("lunch: brood", 824, "Ride 74 min", "HRV 58 · RHR 50 · 6.8u slaap (score 72)", 130, 170)
+    pt = captured_prompts[-1]
+    check("tips fase2: herstel in prompt", "Herstelstatus vannacht" in pt)
+    check("tips fase2: eiwitdoel 170g in prompt", "- Eiwitten: 170g" in pt and "trainingsload 130" in pt)
+
+# ── remind: carb-advies geplande training ─────────────────────────────────────
+with mock.patch.object(remind, "geplande_workouts", return_value=[
+        {"naam": "Lange duurrit", "type": "Ride", "duur_min": 150, "load": 140}]):
+    regel = remind.morgen_training_regel()
+    check("remind: carb-advies bij zware workout", "Lange duurrit" in regel and "koolhydraten" in regel, regel)
+with mock.patch.object(remind, "geplande_workouts", return_value=[
+        {"naam": "Losrijden", "type": "Ride", "duur_min": 30, "load": 25}]):
+    check("remind: stil bij lichte workout", remind.morgen_training_regel() == "")
+with mock.patch.object(remind, "geplande_workouts", return_value=[]):
+    check("remind: stil zonder kalender", remind.morgen_training_regel() == "")
+
+# ── gewicht_check: herstel-alert om 15:00 ─────────────────────────────────────
+import gewicht_check as gc
+gc_messages = []
+
+# dag 3: vuurt (gisteren nog niet waar)
+recs_d3 = _mk_wellness(VD, {**basis_hrv, 0: 50, 1: 51, 2: 49}, {**basis_rhr, 0: 53, 1: 52, 2: 53})
+with mock.patch.object(gc, "wellness_tussen", return_value=recs_d3), \
+     mock.patch.object(gc, "send_message", side_effect=lambda t: gc_messages.append(t)):
+    gc.check_herstel_alert(VD)
+check("gewicht_check: alert verstuurd op dag 3", len(gc_messages) == 1 and "Herstel hapert" in gc_messages[0], str(gc_messages))
+
+# dag 4: conditie gold gisteren ook → geen herhaling
+gc_messages.clear()
+recs_d4 = _mk_wellness(VD, {**{o: 60 for o in range(4, 11)}, 0: 50, 1: 51, 2: 49, 3: 50},
+                       {**{o: 48 for o in range(4, 11)}, 0: 53, 1: 52, 2: 53, 3: 53})
+with mock.patch.object(gc, "wellness_tussen", return_value=recs_d4), \
+     mock.patch.object(gc, "send_message", side_effect=lambda t: gc_messages.append(t)):
+    gc.check_herstel_alert(VD)
+check("gewicht_check: geen herhaalbericht op dag 4", gc_messages == [])
+
+# geen data → stil, geen exception
+with mock.patch.object(gc, "wellness_tussen", return_value=[]), \
+     mock.patch.object(gc, "send_message", side_effect=lambda t: gc_messages.append(t)):
+    gc.check_herstel_alert(VD)
+check("gewicht_check: stil zonder wellness-data", gc_messages == [])
+
+# ── weekly: herstelblok + correlatie ──────────────────────────────────────────
+wel_week = []
+for i in range(28):
+    d = (datetime.date(2026, 6, 11) - datetime.timedelta(days=i)).isoformat()
+    wel_week.append({"datum": d, "hrv": 62 if i >= 7 else 57, "rhr": 48 if i >= 7 else 50,
+                     "slaap_u": 7.2, "slaapscore": 78, "readiness": None})
+maal_alc = [dict(r) for r in maaltijden_rows]
+for r in maal_alc[:4]:
+    r["maaltijden"] = "pasta en 2 pintjes"
+for r in maal_alc[4:]:
+    r["maaltijden"] = r.get("maaltijden") or "gewone dag kip rijst"
+# nachten na de 4 alcoholdagen verlagen
+for r in maal_alc[:4]:
+    nacht = (datetime.date.fromisoformat(r["datum"]) + datetime.timedelta(days=1)).isoformat()
+    for w in wel_week:
+        if w["datum"] == nacht:
+            w["hrv"], w["slaapscore"] = 49, 64
+
+ws_messages.clear()
+with mock.patch.object(ws, "fetch_data", side_effect=lambda t, l: {"maaltijden": maal_alc, "gewicht": gewicht_rows, "sport": sport_rows}[t]), \
+     mock.patch.object(ws, "wellness_tussen", return_value=wel_week), \
+     mock.patch.object(ws, "send_message", side_effect=lambda t: ws_messages.append(t)), \
+     mock.patch.object(ws.datetime, "datetime", WSFakeDT), \
+     mock.patch.object(ws.groq_client.chat.completions, "create",
+                       side_effect=lambda **kw: types.SimpleNamespace(choices=[types.SimpleNamespace(
+                           message=types.SimpleNamespace(content="Top!"))])):
+    ws.main()
+w2 = ws_messages[0]
+check("weekly fase2: herstelblok aanwezig", "🫀 *Herstel deze week:*" in w2, w2[:800])
+check("weekly fase2: HRV met vorige week", "HRV" in w2 and "vorige week" in w2)
+check("weekly fase2: alcohol-correlatie", "🍺 Nacht na alcohol" in w2, w2)
+
+# ── monthly: wellness in grafiek + caption ────────────────────────────────────
+wel_mei = [{"datum": f"2026-05-{d:02d}", "hrv": 60, "rhr": 48, "slaap_u": 7.1, "slaapscore": 77, "readiness": None}
+           for d in range(1, 31)]
+mr_sent["caption"] = None; mr_sent["photo"] = False
+with mock.patch.object(mr, "fetch_data", side_effect=fake_mr_fetch), \
+     mock.patch.object(mr, "wellness_tussen", return_value=wel_mei), \
+     mock.patch.object(mr, "send_photo", side_effect=fake_send_photo), \
+     mock.patch.object(mr, "groq_reflectie", return_value="Mooie maand."), \
+     mock.patch.object(mr.datetime, "datetime", MRFakeDT):
+    mr.main()
+check("monthly fase2: grafiek met wellness-panelen", mr_sent["photo"])
+check("monthly fase2: wellnessregel in caption", mr_sent["caption"] and "🫀 Gem. HRV 60" in mr_sent["caption"], str(mr_sent["caption"]))
+
+# ── import_wellness: historische backfill ─────────────────────────────────────
+import import_wellness as iw
+
+iw_posts = []
+def iw_fake_post(url, payload):
+    iw_posts.append(payload)
+    return True
+
+wel_hist = [{"datum": f"2026-06-{d:02d}", "hrv": 60, "rhr": 48, "slaap_u": 7.0, "slaapscore": 78, "readiness": None}
+            for d in range(1, 12)]
+wel_hist.append({"datum": "2026-06-12", "hrv": None, "rhr": None, "slaap_u": None, "slaapscore": None, "readiness": None})
+act_hist = [{"id": f"h{d}", "datum": f"2026-06-{d:02d}", "naam": "Rit", "type": "Ride",
+             "duur_min": 60, "afstand_km": 25.0, "kcal": 500, "gem_hs": 140, "load": 60} for d in (2, 5, 9)]
+
+with mock.patch.object(iw, "wellness_tussen", return_value=wel_hist), \
+     mock.patch.object(iw, "activiteiten_tussen", return_value=act_hist), \
+     mock.patch.object(iw, "post_naar_sheets", side_effect=iw_fake_post), \
+     mock.patch.object(iw.sys, "argv", ["import_wellness.py", "2026-06-01", "2026-06-12"]):
+    iw.main()
+w_posts = [x for x in iw_posts if x["type"] == "wellness"]
+s_posts = [x for x in iw_posts if x["type"] == "sport"]
+check("import: wellness gepost (lege dag eruit gefilterd)", len(w_posts) == 1 and len(w_posts[0]["records"]) == 11, str(len(w_posts[0]["records"]) if w_posts else 0))
+check("import: sport standaard mee", len(s_posts) == 1 and len(s_posts[0]["activiteiten"]) == 3)
+
+iw_posts.clear()
+with mock.patch.object(iw, "wellness_tussen", return_value=wel_hist), \
+     mock.patch.object(iw, "activiteiten_tussen", return_value=act_hist) as iw_acts, \
+     mock.patch.object(iw, "post_naar_sheets", side_effect=iw_fake_post), \
+     mock.patch.object(iw.sys, "argv", ["import_wellness.py", "2026-06-01", "--zonder-sport"]):
+    iw.main()
+check("import: --zonder-sport slaat sport over", not [x for x in iw_posts if x["type"] == "sport"] and not iw_acts.called)
+
+# batching: 120 records → 3 batches van 50/50/20
+iw_posts.clear()
+wel_groot = [{"datum": (datetime.date(2026, 1, 1) + datetime.timedelta(days=i)).isoformat(),
+              "hrv": 60, "rhr": 48, "slaap_u": 7.0, "slaapscore": 78, "readiness": None} for i in range(120)]
+with mock.patch.object(iw, "wellness_tussen", return_value=wel_groot), \
+     mock.patch.object(iw, "post_naar_sheets", side_effect=iw_fake_post), \
+     mock.patch.object(iw.sys, "argv", ["import_wellness.py", "2026-01-01", "2026-04-30", "--zonder-sport"]):
+    iw.main()
+check("import: batching 50/50/20", [len(x["records"]) for x in iw_posts] == [50, 50, 20], str([len(x["records"]) for x in iw_posts]))
+
+# foutpaden: ongeldige datum + mislukte batch → SystemExit
+import contextlib
+with mock.patch.object(iw.sys, "argv", ["import_wellness.py", "01-06-2026"]):
+    try:
+        iw.main()
+        check("import: ongeldige datum → exit", False)
+    except SystemExit as e:
+        check("import: ongeldige datum → exit", "Ongeldige datum" in str(e))
+with mock.patch.object(iw, "wellness_tussen", return_value=wel_hist), \
+     mock.patch.object(iw, "post_naar_sheets", return_value=False), \
+     mock.patch.object(iw.sys, "argv", ["import_wellness.py", "2026-06-01", "2026-06-12", "--zonder-sport"]):
+    try:
+        iw.main()
+        check("import: mislukte batch → exit met melding", False)
+    except SystemExit as e:
+        check("import: mislukte batch → exit met melding", "mislukte batch" in str(e))
 
 print()
 if FOUTEN:

@@ -179,6 +179,7 @@
     </div>
 
     <div class="chart-card"><h2>⚖️ Gewicht</h2><div class="chart-wrap"><canvas id="chartGewicht"></canvas></div></div>
+    <div class="chart-card"><h2>🫀 Herstel (HRV · slaapscore · RHR)</h2><div class="chart-wrap"><canvas id="chartHerstel"></canvas></div></div>
     <div class="chart-card"><h2>🔥 Calorieën per dag</h2><div class="chart-wrap"><canvas id="chartKcal"></canvas></div></div>
     <div class="chart-card"><h2>💪 Eiwitten per dag</h2><div class="chart-wrap"><canvas id="chartEiwit"></canvas></div></div>
     <div class="chart-card"><h2>🍽️ Verdeling per maaltijd (weekgemiddelde)</h2><div class="chart-wrap"><canvas id="chartMaaltijden"></canvas></div></div>
@@ -195,6 +196,7 @@ const LS_KEY = "cb_api_key";
 let alleMaaltijden = [];   // [{datum: Date, kcal, eiwit, koolh, vet, vezel, score, ontbijt, lunch, avond, snacks}]
 let alleGewichten  = {};   // {"YYYY-MM-DD": kg}
 let alleSport      = {};   // {"YYYY-MM-DD": verbrande kcal (som van activiteiten)}
+let alleWellness   = [];   // [{datum: Date, hrv, rhr, slaap_u, slaapscore}]
 let doelen         = { kcal: 2750, eiwitten: 150 };  // fallback; echte waarden uit config.json
 let periodeDagen   = 30;
 const charts       = {};
@@ -248,11 +250,12 @@ async function laadData() {
       if (cfg && cfg.doelen) doelen = cfg.doelen;
     } catch (e) { /* fallback-doelen blijven staan */ }
 
-    const [maaltijden, gewichten, sport] = await Promise.all([
+    const [maaltijden, gewichten, sport, wellness] = await Promise.all([
       fetchType(url, key, "maaltijden"),
       fetchType(url, key, "gewicht"),
-      // oudere Apps Script-versie zonder sport-type → dashboard blijft werken
+      // oudere Apps Script-versie zonder sport/wellness-type → dashboard blijft werken
       fetchType(url, key, "sport").catch(() => []),
+      fetchType(url, key, "wellness").catch(() => []),
     ]);
 
     alleMaaltijden = maaltijden
@@ -275,6 +278,14 @@ async function laadData() {
       const d = parseDatum(r.datum), k = num(r.kcal);
       if (d && k > 0) alleSport[isoDag(d)] = (alleSport[isoDag(d)] || 0) + k;
     }
+
+    alleWellness = wellness
+      .map(r => ({
+        datum: parseDatum(r.datum), hrv: num(r.hrv), rhr: num(r.rhr),
+        slaap_u: num(r.slaap_u), slaapscore: num(r.slaapscore),
+      }))
+      .filter(r => r.datum && (r.hrv || r.rhr || r.slaapscore))
+      .sort((a, b) => a.datum - b.datum);
 
     toonDashboard();
     render();
@@ -385,6 +396,24 @@ function render() {
       { label: "7d gemiddelde", data: ma, borderColor: "#111", borderWidth: 2, pointRadius: 0, spanGaps: true },
     ]},
     options: { ...basisOpties, plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 10 } } } } },
+  });
+
+  // ── herstel: HRV + slaapscore (linkeras) en RHR (rechteras)
+  const wRows = alleWellness.filter(r => r.datum >= vanaf);
+  maakChart("chartHerstel", {
+    type: "line",
+    data: { labels: wRows.map(r => isoDag(r.datum).slice(5)), datasets: [
+      { label: "HRV", data: wRows.map(r => r.hrv || null), borderColor: "#4c9a6e",
+        borderWidth: 2, pointRadius: 2, spanGaps: true, yAxisID: "y" },
+      { label: "Slaapscore", data: wRows.map(r => r.slaapscore || null), borderColor: "#c9a227",
+        borderDash: [5, 3], borderWidth: 1.5, pointRadius: 0, spanGaps: true, yAxisID: "y" },
+      { label: "RHR", data: wRows.map(r => r.rhr || null), borderColor: "#c95f5f",
+        borderWidth: 1.5, pointRadius: 2, spanGaps: true, yAxisID: "y2" },
+    ]},
+    options: { ...basisOpties,
+      plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 10 } } } },
+      scales: { ...basisOpties.scales,
+        y2: { position: "right", grid: { drawOnChartArea: false }, ticks: { font: { size: 10 } } } } },
   });
 
   // ── kcal per dag — doellijn stijgt op sportdagen (doel + compensatie × sport-kcal)

@@ -1,0 +1,40 @@
+name: Wellness-import (handmatig, eenmalig)
+
+on:
+  workflow_dispatch:           # Handmatig via Actions → Run workflow
+    inputs:
+      start_datum:
+        description: 'Startdatum (YYYY-MM-DD)'
+        required: false
+        default: '2026-06-01'
+      eind_datum:
+        description: 'Einddatum (leeg = vandaag)'
+        required: false
+        default: ''
+      ook_sport:
+        description: 'Ook sportactiviteiten importeren'
+        type: boolean
+        default: true
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Installeer afhankelijkheden
+        run: pip install requests pytz
+
+      - name: Importeer historische data
+        run: >
+          python scripts/import_wellness.py
+          ${{ inputs.start_datum }}
+          ${{ inputs.eind_datum }}
+          ${{ inputs.ook_sport == false && '--zonder-sport' || '' }}
+        env:
+          APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
+          INTERVALS_API_KEY: ${{ secrets.INTERVALS_API_KEY }}

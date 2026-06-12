@@ -6,6 +6,8 @@ import requests
 import pytz
 from groq import Groq
 
+from intervals import wellness_tussen, alcohol_contrast
+
 BOT_TOKEN       = os.environ["BOT_TOKEN"]
 CHAT_ID         = os.environ["CHAT_ID"]
 APPS_SCRIPT_URL = os.environ["APPS_SCRIPT_URL"]
@@ -196,6 +198,10 @@ def main() -> None:
     maaltijden = fetch_data("maaltijden", 25)
     gewichten  = fetch_data("gewicht", 25)
     sport_rows = fetch_data("sport", 100)  # 1 rij per activiteit
+    wellness   = wellness_tussen(
+        (now.date() - datetime.timedelta(days=28)).isoformat(),
+        now.date().isoformat(),
+    )  # rechtstreeks uit intervals.icu — ook historiek van vóór de integratie
 
     if not maaltijden:
         if UNAUTHORIZED:
@@ -305,6 +311,49 @@ def main() -> None:
             f"{sport_tot} kcal verbrand\n"
         )
 
+    herstel_blok = ""
+    herstel_ai   = ""
+    if wellness:
+        def w_avg(rs, key):
+            vals = [r[key] for r in rs if r.get(key)]
+            return round(sum(vals) / len(vals), 1) if vals else None
+
+        vorige_start = now.date() - datetime.timedelta(days=14)
+        deze_w   = [r for r in wellness if (d := parse_date(r.get("datum", ""))) and week_start <= d < now.date()]
+        vorige_w = [r for r in wellness if (d := parse_date(r.get("datum", ""))) and vorige_start <= d < week_start]
+
+        hrv_nu,  hrv_vor = w_avg(deze_w, "hrv"), w_avg(vorige_w, "hrv")
+        rhr_nu,  rhr_vor = w_avg(deze_w, "rhr"), w_avg(vorige_w, "rhr")
+        slaap_nu  = w_avg(deze_w, "slaap_u")
+        score_nu  = w_avg(deze_w, "slaapscore")
+
+        regels = []
+        if hrv_nu:
+            regel = f"  HRV {round(hrv_nu)}"
+            if hrv_vor:
+                regel += f" (vorige week {round(hrv_vor)})"
+            if rhr_nu:
+                regel += f" · RHR {round(rhr_nu)}"
+                if rhr_vor:
+                    regel += f" ({round(rhr_vor)})"
+            regels.append(regel)
+        if slaap_nu:
+            regel = f"  Slaap {slaap_nu}u/nacht"
+            if score_nu:
+                regel += f" (score {round(score_nu)})"
+            regels.append(regel)
+
+        contrast = alcohol_contrast(maaltijden, wellness)
+        if contrast:
+            regel = f"  🍺 Nacht na alcohol (n={contrast['n_alcohol']}): HRV {contrast['d_hrv']:+.0f}"
+            if contrast.get("d_slaapscore") is not None:
+                regel += f" · slaapscore {contrast['d_slaapscore']:+.0f}"
+            regels.append(regel)
+
+        if regels:
+            herstel_blok = "\n🫀 *Herstel deze week:*\n" + "\n".join(regels) + "\n"
+            herstel_ai   = "Herstel deze week: " + "; ".join(r.strip() for r in regels) + ". "
+
     doel_lijn_kcal = f"{DOEL_KCAL} kcal"
     if gem_dag_doel != DOEL_KCAL:
         doel_lijn_kcal = f"gem. {gem_dag_doel} kcal incl. sport"
@@ -328,7 +377,7 @@ def main() -> None:
     context_for_ai = (
         f"Doelen: {DOEL_KCAL} kcal, {DOEL_EIWIT}g eiwit, {DOEL_KOOLH}g koolh, {DOEL_VET}g vet, {DOEL_VEZEL}g vezels. "
         f"Doel-richting: {RICHTING_TEKST}. "
-        f"{sport_ai}"
+        f"{sport_ai}{herstel_ai}"
         f"Gemiddeld deze week: {avg_cal} kcal, {avg_eiwit}g eiwit, score {avg_score}/10. "
         f"Notities: {'; '.join(recent_notes[-3:]) if recent_notes else 'geen'}."
     )
@@ -363,7 +412,7 @@ def main() -> None:
     if meal_lines:
         message += f"\n🍽️ *Verdeling per maaltijd:*\n{meal_lines}"
 
-    message += f"{sport_blok}{doel_blok}{tdee_blok(maaltijden, wbd, today_d)}{prev_blok}\n💬 _{ai_tip}_"
+    message += f"{sport_blok}{herstel_blok}{doel_blok}{tdee_blok(maaltijden, wbd, today_d)}{prev_blok}\n💬 _{ai_tip}_"
 
     send_message(message)
 

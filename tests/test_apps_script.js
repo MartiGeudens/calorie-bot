@@ -8,7 +8,13 @@ class FakeSheet {
   getLastRow() { return this.rows.length; }
   getRange(row, col, numRows, numCols) {
     const self = this;
-    return { getValues: () => self.rows.slice(row - 1, row - 1 + numRows).map(r => r.slice(col - 1, col - 1 + numCols)) };
+    return {
+      getValues: () => self.rows.slice(row - 1, row - 1 + numRows).map(r => r.slice(col - 1, col - 1 + numCols)),
+      setValues: vals => vals.forEach((v, i) => {
+        const r = self.rows[row - 1 + i] || (self.rows[row - 1 + i] = []);
+        v.forEach((cel, j) => { r[col - 1 + j] = cel; });
+      }),
+    };
   }
   getDataRange() { const self = this; return { getValues: () => self.rows.map(r => r.slice()) }; }
 }
@@ -91,6 +97,39 @@ testSport();
 const n1 = sheets["Sport"].rows.length;
 testSport();
 check("testSport: 2e run voegt niets toe", sheets["Sport"].rows.length === n1 && n1 === 3, `${n1} → ${sheets["Sport"].rows.length}`);
+
+// ── fase 2: wellness ──────────────────────────────────────────────────────────
+// 10. wellness: nieuwe tab + 2 rijen
+r = post({ type: "wellness", records: [
+  { datum: "2026-06-11", hrv: 62, rhr: 48, slaap_u: 7.3, slaapscore: 81, readiness: 75 },
+  { datum: "2026-06-12", hrv: 58, rhr: 50, slaap_u: 6.8, slaapscore: 72, readiness: null },
+]});
+check("doPost wellness: status ok + 2 verwerkt", r.status === "ok" && r.verwerkt === 2, JSON.stringify(r));
+check("doPost wellness: header + 2 rijen", sheets["Wellness"].rows.length === 3);
+check("doPost wellness: null → lege cel", sheets["Wellness"].rows[2][5] === "", JSON.stringify(sheets["Wellness"].rows[2]));
+
+// 11. upsert: zelfde datum opnieuw met andere waarden → rij bijgewerkt, geen extra rij
+r = post({ type: "wellness", records: [
+  { datum: "2026-06-12", hrv: 59, rhr: 49, slaap_u: 6.8, slaapscore: 74, readiness: 70 },
+]});
+check("doPost wellness: upsert geen extra rij", r.verwerkt === 1 && sheets["Wellness"].rows.length === 3, JSON.stringify(r));
+check("doPost wellness: waarden bijgewerkt", sheets["Wellness"].rows[2][1] === 59 && sheets["Wellness"].rows[2][4] === 74, JSON.stringify(sheets["Wellness"].rows[2]));
+
+// 12. doGet wellness
+g = JSON.parse(doGet({ parameter: { key: "geheim", type: "wellness", limit: "10" } })._t);
+check("doGet wellness: 2 records", Array.isArray(g) && g.length === 2, JSON.stringify(g));
+check("doGet wellness: velden", g[1].hrv === 59 && g[1].slaap_u === 6.8 && g[1].datum === "2026-06-12", JSON.stringify(g[1]));
+
+// 13. doGet wellness zonder tab
+delete sheets["Wellness"];
+g = JSON.parse(doGet({ parameter: { key: "geheim", type: "wellness" } })._t);
+check("doGet wellness: geen tab → []", Array.isArray(g) && g.length === 0);
+
+// 14. testWellness() draait en upsert bij 2e run
+testWellness();
+const w1 = sheets["Wellness"].rows.length;
+testWellness();
+check("testWellness: 2e run geen extra rijen", sheets["Wellness"].rows.length === w1 && w1 === 3, `${w1} → ${sheets["Wellness"].rows.length}`);
 
 console.log();
 if (fails) { console.log(`❌ ${fails} test(s) gefaald`); process.exit(1); }

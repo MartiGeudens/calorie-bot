@@ -5,7 +5,8 @@ import datetime
 import requests
 import pytz
 
-from intervals import activiteiten_van, sport_kcal_totaal, sport_regel, dagdoel
+from intervals import (activiteiten_van, sport_kcal_totaal, sport_regel, dagdoel,
+                       geplande_workouts)
 
 BOT_TOKEN    = os.environ["BOT_TOKEN"]
 CHAT_ID      = int(os.environ["CHAT_ID"])
@@ -138,6 +139,34 @@ def fetch_sport_today():
     acts = activiteiten_van(today)
     return acts, sport_kcal_totaal(acts)
 
+def load_tss_zwaar() -> float:
+    try:
+        with open("data/config/config.json", encoding="utf-8") as f:
+            return float(json.load(f).get("wellness", {}).get("tss_zware_dag", 100))
+    except Exception:
+        return 100.0
+
+def morgen_training_regel() -> str:
+    """Carb-advies als er morgen een zware workout in de intervals.icu-kalender staat.
+    Lege string zonder kalendergebruik — dan blijft de herinnering zoals ze was."""
+    morgen = (datetime.datetime.now(BRUSSELS) + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+    workouts = geplande_workouts(morgen)
+    tss_zwaar = load_tss_zwaar()
+    zwaar = [w for w in workouts if w["load"] >= tss_zwaar or w["duur_min"] >= 90]
+    if not zwaar:
+        return ""
+    w = max(zwaar, key=lambda x: (x["load"], x["duur_min"]))
+    delen = []
+    if w["duur_min"]:
+        delen.append(f"~{w['duur_min']} min")
+    if w["load"]:
+        delen.append(f"load {w['load']}")
+    detail = f" ({', '.join(delen)})" if delen else ""
+    return (
+        f"\n\n📅 Morgen gepland: *{w['naam']}*{detail} — "
+        f"extra koolhydraten vanavond is slim!"
+    )
+
 def build_smart_message(food_messages: list, sport_acts: list, sport_kcal: int) -> str:
     doelen    = load_doelen()
     doel_kcal = doelen["kcal"]
@@ -171,7 +200,7 @@ def build_smart_message(food_messages: list, sport_acts: list, sport_kcal: int) 
             lines.append(f"\nTot nu toe ~*{kcal} kcal* — je zit ~{abs(rest)} kcal boven je doel van {dag_doel}.")
 
     lines.append("\nNog iets gegeten dat er niet bij staat? Stuur het nog door — om middernacht analyseer ik alles!")
-    return "\n".join(lines)
+    return "\n".join(lines) + morgen_training_regel()
 
 def main() -> None:
     # De herinnering mag NOOIT stilletjes uitvallen: bij elke fout in het
@@ -189,6 +218,7 @@ def main() -> None:
                     f"\n\n🚴 Al wel gezien: *{sport_kcal} kcal* gesport vandaag "
                     f"({sport_regel(sport_acts)}) — eet voldoende terug!"
                 )
+            message += morgen_training_regel()
     except Exception as e:
         print(f"Slimme herinnering mislukt, val terug op generieke tekst: {e}")
         message = GENERIEKE_HERINNERING
