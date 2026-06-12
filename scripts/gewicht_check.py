@@ -5,7 +5,7 @@ import datetime
 import requests
 import pytz
 
-from intervals import wellness_tussen, herstel_alert
+from intervals import wellness_tussen, herstel_alert, upload_gewicht
 
 BOT_TOKEN       = os.environ["BOT_TOKEN"]
 CHAT_ID         = int(os.environ["CHAT_ID"])
@@ -123,6 +123,15 @@ def main():
     if save_weight(today, gewicht):
         streak = calculate_streak("gewicht")
         msg = f"⚖️ Gewicht opgeslagen: *{gewicht} kg* ✅"
+        # Fase 3: ook naar intervals.icu (W/kg en eFTP kloppen daar dan altijd)
+        try:
+            ucfg = load_upload_config()
+            if ucfg.get("gewicht", True) and upload_gewicht(
+                today, gewicht, bool(ucfg.get("gewicht_locked", False))
+            ):
+                msg += "\n📤 Ook bijgewerkt in intervals.icu"
+        except Exception as e:
+            print(f"intervals-upload genegeerd: {e}")
         tekst = streak_tekst(streak)
         if tekst:
             msg += f"\n{tekst}"
@@ -134,6 +143,13 @@ def load_wellness_config() -> dict:
     try:
         with open("data/config/config.json", encoding="utf-8") as f:
             return json.load(f).get("wellness", {})
+    except Exception:
+        return {}
+
+def load_upload_config() -> dict:
+    try:
+        with open("data/config/config.json", encoding="utf-8") as f:
+            return json.load(f).get("intervals_upload", {})
     except Exception:
         return {}
 

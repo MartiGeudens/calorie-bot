@@ -69,6 +69,8 @@ def activiteiten_tussen(oudste: str, nieuwste: str) -> list:
             "gem_hs":     int(round(_num(a.get("average_heartrate")))),
             # Trainingsload (TSS) — voor het dynamische eiwitdoel op zware dagen
             "load":       int(round(_num(a.get("icu_training_load")))),
+            # Bestaande beschrijving — nodig om de "Gevoed:"-regel toe te voegen (fase 3)
+            "beschrijving": a.get("description") or "",
         })
     return activiteiten
 
@@ -333,3 +335,131 @@ def alcohol_contrast(maaltijd_rows: list, wellness_records: list,
         "d_hrv": round(d_hrv, 1),
         "d_slaapscore": round(d_slaap, 1) if d_slaap is not None else None,
     }
+
+
+# ── Fase 3: terugschrijven naar intervals.icu ─────────────────────────────────
+NOTITIE_PREFIX = "🍽️ Voeding"
+
+
+def _auth():
+    api_key = os.environ.get("INTERVALS_API_KEY", "")
+    return ("API_KEY", api_key) if api_key else None
+
+
+def upload_gewicht(datum: str, kg: float, locked: bool = False) -> bool:
+    """Schrijft het ochtendgewicht naar intervals.icu (wellness-bulk) zodat
+    W/kg en eFTP daar altijd kloppen. `locked` default uit: de lock werkt op
+    recordniveau en zou latere Garmin-wellness-syncs kunnen blokkeren."""
+    auth = _auth()
+    if not auth:
+        return False
+    record = {"id": datum, "weight": round(float(kg), 2)}
+    if locked:
+        record["locked"] = True
+    try:
+        resp = requests.put(
+            f"{API_BASE}/athlete/0/wellness-bulk",
+            json=[record], auth=auth, timeout=15,
+        )
+        if not resp.ok:
+            print(f"intervals.icu gewicht-upload: HTTP {resp.status_code}")
+        return resp.ok
+    except Exception as e:
+        print(f"intervals.icu gewicht-upload mislukt: {e}")
+        return False
+
+
+def upload_voeding(datum: str, velden: dict) -> bool:
+    """Schrijft voedingsdata naar het wellness-record van `datum`.
+    `velden` bv. {"kcalConsumed": 2800, "Voedingsscore": 8, "EiwitG": 140} —
+    veldnamen komen uit config.json (custom velden eerst aanmaken in intervals.icu)."""
+    auth = _auth()
+    velden = {k: v for k, v in (velden or {}).items() if v is not None}
+    if not auth or not velden:
+        return False
+    try:
+        resp = requests.put(
+            f"{API_BASE}/athlete/0/wellness-bulk",
+            json=[{"id": datum, **velden}], auth=auth, timeout=15,
+        )
+        if not resp.ok:
+            print(f"intervals.icu voeding-upload: HTTP {resp.status_code} — "
+                  f"check veldnamen ({', '.join(velden)}) in je custom wellness-velden")
+        return resp.ok
+    except Exception as e:
+        print(f"intervals.icu voeding-upload mislukt: {e}")
+        return False
+
+
+def upload_kalendernotitie(datum: str, naam: str, beschrijving: str) -> bool:
+    """Zet het dagoverzicht als NOTE in de trainingskalender (upsert: een
+    bestaande caloriebot-notitie op die dag wordt bijgewerkt, nooit verdubbeld)."""
+    auth = _auth()
+    if not auth:
+        return False
+    try:
+        resp = requests.get(
+            f"{API_BASE}/athlete/0/events",
+            params={"oldest": datum, "newest": datum},
+            auth=auth, timeout=15,
+        )
+        bestaande = resp.json() if resp.ok and isinstance(resp.json(), list) else []
+    except Exception:
+        bestaande = []
+
+    eigen = next(
+        (ev for ev in bestaande
+         if isinstance(ev, dict) and ev.get("category") == "NOTE"
+         and str(ev.get("name", "")).startswith(NOTITIE_PREFIX)),
+        None,
+    )
+    try:
+        if eigen and eigen.get("id"):
+            resp = requests.put(
+                f"{API_BASE}/athlete/0/events/{eigen['id']}",
+                json={"name": naam, "description": beschrijving},
+                auth=auth, timeout=15,
+            )
+        else:
+            resp = requests.post(
+                f"{API_BASE}/athlete/0/events",
+                json={
+                    "category": "NOTE",
+                    "start_date_local": f"{datum}T00:00:00",
+                    "name": naam,
+                    "description": beschrijving,
+                },
+                auth=auth, timeout=15,
+            )
+        if not resp.ok:
+            print(f"intervals.icu kalendernotitie: HTTP {resp.status_code}")
+        return resp.ok
+    except Exception as e:
+        print(f"intervals.icu kalendernotitie mislukt: {e}")
+        return False
+
+
+def verrijk_activiteit(activiteit: dict, regel: str) -> bool:
+    """Voegt een fueling-regel ("Gevoed: ...") toe aan de beschrijving van een
+    activiteit. Een eerdere Gevoed-regel wordt vervangen (veilig bij her-runs);
+    de rest van de beschrijving blijft onaangeroerd."""
+    auth = _auth()
+    act_id = activiteit.get("id")
+    if not auth or not act_id:
+        return False
+    huidig = activiteit.get("beschrijving") or ""
+    behouden = [r for r in huidig.splitlines() if not r.strip().startswith("Gevoed:")]
+    basis = "\n".join(behouden).strip()
+    nieuw = f"{basis}\n\n{regel}" if basis else regel
+    try:
+        resp = requests.put(
+            f"{API_BASE}/activity/{act_id}",
+            json={"description": nieuw},
+            auth=auth, timeout=15,
+        )
+        if not resp.ok:
+            print(f"intervals.icu activiteit-verrijking: HTTP {resp.status_code}")
+        return resp.ok
+    except Exception as e:
+        print(f"intervals.icu activiteit-verrijking mislukt: {e}")
+        return False

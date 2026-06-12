@@ -177,6 +177,11 @@ def fake_post_all(url, json=None, data=None, files=None, timeout=None, allow_red
     saved_payloads.append(json)
     return FakeResp({"status": "ok"})
 
+intervals_puts = []
+def fake_put_all(url, json=None, auth=None, timeout=None, **kw):
+    intervals_puts.append((url, json))
+    return FakeResp({"ok": True})
+
 router = GetRouter(
     updates=[{"update_id": 1, "message": {"from": {"id": 123, "is_bot": False},
               "date": datetime.datetime.now().timestamp(),
@@ -186,6 +191,7 @@ router = GetRouter(
 
 with mock.patch.object(process_food.requests, "get", side_effect=router), \
      mock.patch.object(process_food.requests, "post", side_effect=fake_post_all), \
+     mock.patch.object(process_food.requests, "put", side_effect=fake_put_all), \
      mock.patch.object(process_food.groq_client.chat.completions, "create", side_effect=fake_groq_create), \
      mock.patch.object(process_food, "save_last_update_id", lambda x: None), \
      mock.patch.object(process_food.datetime, "datetime", wraps=datetime.datetime) as fake_dt:
@@ -231,12 +237,13 @@ with mock.patch.object(tips.groq_client.chat.completions, "create", side_effect=
 
 # ── 4. remind ─────────────────────────────────────────────────────────────────
 import remind
-msg = remind.build_smart_message(
-    ["lunch: broodjes"],
-    [{"id": "i111", "datum": "2026-06-11", "naam": "Ochtendrit", "type": "Ride",
-      "duur_min": 92, "afstand_km": 45.2, "kcal": 612, "gem_hs": 148}],
-    612,
-)
+with mock.patch.object(remind, "geplande_workouts", return_value=[]):
+    msg = remind.build_smart_message(
+        ["lunch: broodjes"],
+        [{"id": "i111", "datum": "2026-06-11", "naam": "Ochtendrit", "type": "Ride",
+          "duur_min": 92, "afstand_km": 45.2, "kcal": 612, "gem_hs": 148}],
+        612,
+    )
 check("remind: sportregel in slim bericht", "🚴 Gesport: *612 kcal*" in msg, msg[:300])
 check("remind: dynamisch doel 3362", "3362" in msg, msg[:300])
 
@@ -458,6 +465,7 @@ router3 = GetRouter(
 router3.wellness_data = WELLNESS_VANDAAG
 with mock.patch.object(process_food.requests, "get", side_effect=router3), \
      mock.patch.object(process_food.requests, "post", side_effect=fake_post_all), \
+     mock.patch.object(process_food.requests, "put", side_effect=fake_put_all), \
      mock.patch.object(process_food.groq_client.chat.completions, "create", side_effect=fake_groq_create), \
      mock.patch.object(process_food, "save_last_update_id", lambda x: None), \
      mock.patch.object(process_food.datetime, "datetime", wraps=datetime.datetime) as fdt3:
@@ -628,6 +636,122 @@ with mock.patch.object(iw, "wellness_tussen", return_value=wel_hist), \
         check("import: mislukte batch → exit met melding", False)
     except SystemExit as e:
         check("import: mislukte batch → exit met melding", "mislukte batch" in str(e))
+
+# ════════════════════════════════════════════════════════════════════════════
+# FASE 3 — terugschrijven naar intervals.icu
+# ════════════════════════════════════════════════════════════════════════════
+
+# ── upload_gewicht ────────────────────────────────────────────────────────────
+puts = []
+def fput(url, json=None, auth=None, timeout=None, **kw):
+    puts.append((url, json))
+    return FakeResp({"ok": True})
+
+with mock.patch.object(intervals.requests, "put", side_effect=fput):
+    check("upload_gewicht: True bij succes", intervals.upload_gewicht("2026-06-12", 75.0))
+    url, body = puts[-1]
+    check("upload_gewicht: wellness-bulk payload", url.endswith("/athlete/0/wellness-bulk")
+          and body == [{"id": "2026-06-12", "weight": 75.0}], str(body))
+    intervals.upload_gewicht("2026-06-12", 75.0, locked=True)
+    check("upload_gewicht: locked-vlag alleen indien gevraagd", puts[-1][1][0].get("locked") is True
+          and "locked" not in puts[-2][1][0])
+
+with mock.patch.object(intervals.requests, "put", return_value=FakeResp({}, 500)):
+    check("upload_gewicht: HTTP-fout → False", not intervals.upload_gewicht("2026-06-12", 75.0))
+sleutel = os.environ.pop("INTERVALS_API_KEY")
+check("upload_gewicht: geen key → False", not intervals.upload_gewicht("2026-06-12", 75.0))
+os.environ["INTERVALS_API_KEY"] = sleutel
+
+# ── upload_voeding ────────────────────────────────────────────────────────────
+puts.clear()
+with mock.patch.object(intervals.requests, "put", side_effect=fput):
+    ok = intervals.upload_voeding("2026-06-12", {"kcalConsumed": 2800, "Voedingsscore": 8, "EiwitG": None})
+    check("upload_voeding: None-velden gefilterd", ok and puts[-1][1] == [{"id": "2026-06-12", "kcalConsumed": 2800, "Voedingsscore": 8}], str(puts[-1][1]))
+    check("upload_voeding: lege velden → False zonder call", not intervals.upload_voeding("2026-06-12", {"x": None}) and len(puts) == 1)
+
+# ── upload_kalendernotitie (upsert) ───────────────────────────────────────────
+posts = []
+def fpost(url, json=None, auth=None, timeout=None, **kw):
+    posts.append((url, json))
+    return FakeResp({"id": 123})
+
+# geen bestaande notitie → POST
+with mock.patch.object(intervals.requests, "get", return_value=FakeResp([])), \
+     mock.patch.object(intervals.requests, "post", side_effect=fpost):
+    ok = intervals.upload_kalendernotitie("2026-06-12", "🍽️ Voeding: 2800 kcal · score 8/10", "details")
+    check("notitie: nieuwe → POST", ok and posts and posts[-1][1]["category"] == "NOTE"
+          and posts[-1][1]["start_date_local"] == "2026-06-12T00:00:00", str(posts))
+
+# bestaande eigen notitie → PUT op dat event
+puts.clear()
+bestaand = [{"id": 99, "category": "NOTE", "name": "🍽️ Voeding: 2500 kcal · score 7/10"}]
+with mock.patch.object(intervals.requests, "get", return_value=FakeResp(bestaand)), \
+     mock.patch.object(intervals.requests, "put", side_effect=fput):
+    ok = intervals.upload_kalendernotitie("2026-06-12", "🍽️ Voeding: 2800 kcal · score 8/10", "details")
+    check("notitie: bestaande eigen → PUT (geen dubbel)", ok and puts and puts[-1][0].endswith("/events/99"), str(puts))
+
+# vreemde notitie op die dag → toch POST (niet andermans notitie overschrijven)
+posts.clear()
+with mock.patch.object(intervals.requests, "get", return_value=FakeResp([{"id": 5, "category": "NOTE", "name": "memo tandarts"}])), \
+     mock.patch.object(intervals.requests, "post", side_effect=fpost):
+    intervals.upload_kalendernotitie("2026-06-12", "🍽️ Voeding: 2800 kcal · score 8/10", "d")
+    check("notitie: vreemde NOTE blijft staan → POST", len(posts) == 1)
+
+# ── verrijk_activiteit ────────────────────────────────────────────────────────
+puts.clear()
+with mock.patch.object(intervals.requests, "put", side_effect=fput):
+    regel = "Gevoed: 2800 kcal · 150g eiwit (score 8/10)"
+    intervals.verrijk_activiteit({"id": "i9", "beschrijving": ""}, regel)
+    check("verrijk: lege beschrijving → alleen regel", puts[-1][1]["description"] == regel
+          and puts[-1][0].endswith("/activity/i9"), str(puts[-1]))
+    intervals.verrijk_activiteit({"id": "i9", "beschrijving": "Mooie rit langs het kanaal"}, regel)
+    check("verrijk: bestaande tekst behouden", puts[-1][1]["description"] == f"Mooie rit langs het kanaal\n\n{regel}", repr(puts[-1][1]["description"]))
+    intervals.verrijk_activiteit({"id": "i9", "beschrijving": f"Mooie rit\n\nGevoed: 2000 kcal · 90g eiwit (score 5/10)"}, regel)
+    d = puts[-1][1]["description"]
+    check("verrijk: oude Gevoed-regel vervangen", d.count("Gevoed:") == 1 and "2800 kcal" in d and "2000 kcal" not in d, repr(d))
+    check("verrijk: zonder id → False", not intervals.verrijk_activiteit({"beschrijving": "x"}, regel))
+
+# ── process_food.push_naar_intervals ──────────────────────────────────────────
+f3_data = {"calories": 2800, "score": 8, "eiwitten": 150, "koolhydraten": 320,
+           "vetten": 85, "vezels": 30, "notitie": "prima"}
+f3_calls = {}
+def reg(naam, waarde):
+    f3_calls[naam] = waarde
+    return True
+
+with mock.patch.object(process_food, "upload_voeding", side_effect=lambda d, v: reg("voeding", (d, v))), \
+     mock.patch.object(process_food, "upload_kalendernotitie", side_effect=lambda d, n, b: reg("note", (n, b))), \
+     mock.patch.object(process_food, "verrijk_activiteit", side_effect=lambda a, r: reg("act", (a.get("id"), r))):
+    process_food.push_naar_intervals("2026-06-12", f3_data, [{"id": "iZ1", "beschrijving": ""}])
+check("push: wellness-velden uit config (incl. ingebouwde voedingsvelden)",
+      f3_calls.get("voeding") == ("2026-06-12", {"kcalConsumed": 2800, "Voedingsscore": 8,
+                                                  "protein": 150, "carbohydrates": 320, "fatTotal": 85}),
+      str(f3_calls.get("voeding")))
+check("push: notitie-naam correct", f3_calls.get("note") and f3_calls["note"][0].startswith("🍽️ Voeding: 2800 kcal"), str(f3_calls.get("note")))
+check("push: fueling-regel", f3_calls.get("act") == ("iZ1", "Gevoed: 2800 kcal · 150g eiwit (score 8/10)"), str(f3_calls.get("act")))
+
+# alle toggles uit → geen enkele call
+f3_calls.clear()
+uit = {"gewicht": False, "kcal": False, "custom_velden": {}, "kalendernotitie": False, "activiteit_beschrijving": False}
+with mock.patch.object(process_food, "load_upload_config", return_value=uit), \
+     mock.patch.object(process_food, "upload_voeding", side_effect=lambda d, v: reg("voeding", 1)), \
+     mock.patch.object(process_food, "upload_kalendernotitie", side_effect=lambda d, n, b: reg("note", 1)), \
+     mock.patch.object(process_food, "verrijk_activiteit", side_effect=lambda a, r: reg("act", 1)):
+    process_food.push_naar_intervals("2026-06-12", f3_data, [{"id": "iZ1"}])
+check("push: toggles uit → niets geüpload", f3_calls == {})
+
+# ── gewicht_check: upload bij 15:00 ───────────────────────────────────────────
+gc2_msgs, up_calls = [], []
+with mock.patch.object(gc, "get_updates", return_value=[
+        {"update_id": 1, "message": {"from": {"id": 123, "is_bot": False},
+         "date": datetime.datetime.now().timestamp(), "text": "75.0"}}]), \
+     mock.patch.object(gc, "save_weight", return_value=True), \
+     mock.patch.object(gc, "calculate_streak", return_value=0), \
+     mock.patch.object(gc, "upload_gewicht", side_effect=lambda d, kg, locked: (up_calls.append((kg, locked)), True)[1]), \
+     mock.patch.object(gc, "send_message", side_effect=lambda t: gc2_msgs.append(t)):
+    gc.main()
+check("gewicht_check: upload aangeroepen (locked uit)", up_calls == [(75.0, False)], str(up_calls))
+check("gewicht_check: 📤-bevestiging in bericht", gc2_msgs and "intervals.icu" in gc2_msgs[0], str(gc2_msgs))
 
 print()
 if FOUTEN:

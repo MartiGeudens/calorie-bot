@@ -7,7 +7,9 @@ import pytz
 from groq import Groq
 
 from intervals import (activiteiten_tussen, sport_kcal_totaal, sport_regel, dagdoel,
-                       sport_load_totaal, wellness_tussen, wellness_regel)
+                       sport_load_totaal, wellness_tussen, wellness_regel,
+                       upload_gewicht, upload_voeding, upload_kalendernotitie,
+                       verrijk_activiteit)
 
 BOT_TOKEN       = os.environ["BOT_TOKEN"]
 CHAT_ID         = int(os.environ["CHAT_ID"])
@@ -42,6 +44,13 @@ def load_wellness_config() -> dict:
 _wcfg         = load_wellness_config()
 TSS_ZWAAR     = float(_wcfg.get("tss_zware_dag", 100))
 EIWIT_EXTRA_G = int(_wcfg.get("eiwit_extra_g", 20))
+
+def load_upload_config() -> dict:
+    try:
+        with open("data/config/config.json", encoding="utf-8") as f:
+            return json.load(f).get("intervals_upload", {})
+    except Exception:
+        return {}
 RICHTING_TEKST = {
     "aankomen":    "aankomen — een calorie-surplus en voldoende eiwit zijn gewenst; te weinig eten is hier het probleem, niet te veel",
     "afvallen":    "afvallen — een calorie-tekort is gewenst",
@@ -396,6 +405,51 @@ def fetch_wellness_today(today: str):
 
     return next((r for r in records if r["datum"] == today), None)
 
+def push_naar_intervals(today: str, data: dict, sport_acts: list) -> None:
+    """Fase 3: voedingsdata terugschrijven naar intervals.icu — kcal-inname,
+    voedingsscore en eiwit in het wellness-record, het dagoverzicht als
+    kalendernotitie en een fueling-regel bij elke activiteit van vandaag.
+    Faalt stil: de Telegram-flow is dan al volledig afgerond."""
+    cfg = load_upload_config()
+    try:
+        velden = {}
+        if cfg.get("kcal", True):
+            velden[cfg.get("kcal_veld", "kcalConsumed")] = int(data["calories"])
+        bronnen = {
+            "score":        data.get("score"),
+            "eiwitten":     data.get("eiwitten"),
+            "koolhydraten": data.get("koolhydraten"),
+            "vetten":       data.get("vetten"),
+        }
+        for veld, bron in (cfg.get("custom_velden") or {}).items():
+            if bronnen.get(bron) is not None:
+                velden[veld] = bronnen[bron]
+        if velden and upload_voeding(today, velden):
+            print(f"intervals.icu: voeding geüpload ({', '.join(velden)})")
+
+        if cfg.get("kalendernotitie", True):
+            naam = f"🍽️ Voeding: {data['calories']} kcal · score {data['score']}/10"
+            beschrijving = (
+                f"Calorieën: {data['calories']} kcal\n"
+                f"Eiwitten: {data['eiwitten']} g · Koolhydraten: {data['koolhydraten']} g · "
+                f"Vetten: {data['vetten']} g · Vezels: {data['vezels']} g\n"
+                f"Score: {data['score']}/10\n"
+                f"{data.get('notitie', '')}"
+            ).strip()
+            if upload_kalendernotitie(today, naam, beschrijving):
+                print("intervals.icu: kalendernotitie bijgewerkt")
+
+        if cfg.get("activiteit_beschrijving", True) and sport_acts:
+            regel = (
+                f"Gevoed: {data['calories']} kcal · {data['eiwitten']}g eiwit "
+                f"(score {data['score']}/10)"
+            )
+            for act in sport_acts:
+                if verrijk_activiteit(act, regel):
+                    print(f"intervals.icu: activiteit {act.get('id')} verrijkt")
+    except Exception as e:
+        print(f"intervals.icu push genegeerd: {e}")
+
 def main() -> None:
     today   = datetime.datetime.now(BRUSSELS).strftime("%Y-%m-%d")
     updates = get_updates()
@@ -421,6 +475,14 @@ def main() -> None:
         if save_weight(today, late_weight):
             weight_note = f"⚖️ Gewicht alsnog opgeslagen: *{late_weight} kg*"
             print(f"Gewicht-vangnet: {late_weight} kg opgeslagen voor {today}")
+            try:
+                ucfg = load_upload_config()
+                if ucfg.get("gewicht", True) and upload_gewicht(
+                    today, late_weight, bool(ucfg.get("gewicht_locked", False))
+                ):
+                    print("intervals.icu: gewicht geüpload (vangnet)")
+            except Exception as e:
+                print(f"intervals-upload genegeerd: {e}")
         else:
             weight_note = f"⚠️ Gewicht gevonden ({late_weight} kg) maar opslaan mislukte."
 
@@ -529,6 +591,7 @@ def main() -> None:
         if weight_note:
             msg += f"\n{weight_note}"
         send_message(msg)
+        push_naar_intervals(today, data, sport_acts)
     else:
         msg = "⚠️ Analyse gelukt, maar opslaan in spreadsheet mislukte."
         if weight_note:

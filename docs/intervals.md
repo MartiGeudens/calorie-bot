@@ -99,12 +99,20 @@ Thresholds live in `data/config/config.json`:
 
 **Backfilling history:** run the *Wellness-import* workflow (Actions → Run workflow) to import wellness — and optionally activities — from a start date (default 2026-06-01, the start of food tracking) into the sheets. Safe to re-run: wellness upserts per date, sport dedupes on Intervals ID. Locally: `python scripts/import_wellness.py [start] [eind] [--zonder-sport]`.
 
-## Troubleshooting
+## Writing back to intervals.icu (phase 3)
 
-| Symptom | Cause / fix |
-|---|---|
-| No 🚴 block in the summary | Secret `INTERVALS_API_KEY` missing or workflow not updated; check the Actions log for "intervals.icu:" lines |
-| HTTP 401/403 in the log | Wrong/expired API key — regenerate in Developer Settings |
-| Activity missing | Garmin → intervals.icu sync can take a few minutes; yesterday's late activities are caught by the next 23:58 run |
-| Duplicate rows in Sport tab | Old Apps Script version still deployed — deploy a new version (step 5) |
-| kcal is 0 for an activity | Activity has no calorie data in Garmin (e.g. manually created activity) |
+The bot also pushes data *to* intervals.icu — every part individually switchable in `config.json` → `intervals_upload`:
+
+```json
+"intervals_upload": {
+  "gewicht": true,
+  "gewicht_locked": false,
+  "kcal": true,
+  "kcal_veld": "kcalConsumed",
+  "custom_velden": { "Voedingsscore": "score", "protein": "eiwitten", "carbohydrates": "koolhydraten", "fatTotal": "vetten" },
+  "kalendernotitie": true,
+  "activiteit_beschrijving": true
+}
+```
+
+- **Weight (15:00 + 23:58 catch-net)** — your morning weight goes to the intervals.icu wellness record, so W/kg, eFTP and power stats are always correct there. `gewicht_locked` is **off by default**: the l
